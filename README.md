@@ -86,7 +86,27 @@ console.log(result);
 AI Reliability Layer is intentionally small. It’s built around a few core ideas that make LLM workflows predictable, observable, and easy to reason about.
 
 ---
+## Architecture overview
 
+```mermaid
+flowchart TD
+
+    A[User app code] --> B[defineIntent]
+    A --> C[runIntent]
+
+    B --> D[Intent definition]
+    D --> E[Execution engine]
+
+    C --> E
+
+    E --> F[Retry timeout fallback]
+    F --> E
+
+    E --> G[Telemetry sink]
+
+    E --> H[OpenAI provider]
+    H --> I[OpenAI API]
+```
 ### **Intents**
 
 An **intent** describes *what you want your workflow to accomplish* — not the low-level mechanics of making the model behave.
