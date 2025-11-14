@@ -103,6 +103,41 @@ const intent = defineIntent({
   steps: StepDefinition[],
 });
 ```
+### `stepDefintion()`
+A **step** is the smallest unit of work in an intent.  
+Each step describes a *single meaningful action* in a workflow — for example:
+
+- “call the primary model”
+- “sanitize the output”
+- “fallback to a cheaper model”
+- “validate response structure”
+- “retry if rate-limited”
+
+Steps run in order unless a fallback path redirects execution.
+
+```ts
+type StepDefinition = {
+  id: string;
+  run: (ctx: ExecutionContext) => Promise<any>;
+
+  // Optional reliability policies
+  retry?: { maxAttempts: number };  // automatic retry behavior
+  timeoutMs?: number;               // maximum time the step is allowed to run
+  fallbackTo?: string;              // step to jump to if this one fails
+};
+```
+### `runIntent(intent, input, options?)`
+Executes an intent with the given input.
+
+Applies retry/timeout/fallback rules
+Produces a deterministic execution trace
+Emits telemetry events as steps run
+
+``` ts
+const result = await runIntent(intent, input, {
+  onEvent?: (event: TelemetryEvent) => void,
+});
+```
 ## Architecture overview
 
 ```mermaid
