@@ -79,6 +79,7 @@ const result = await runIntent(getAnswer, {
 });
 
 console.log(result);
+```
 
 ## Core concepts
 
@@ -88,8 +89,9 @@ AI Reliability Layer is intentionally small. It’s built around a few core idea
 
 ### **Intents**
 
-An **intent** describes *what you want your workflow to accomplish* — not the low-level mechanics of making the model behave.  
-It consists of a named collection of ordered steps, each representing a meaningful action in your workflow (e.g., “call the primary model,” “sanitize output,” “fallback to a cheaper model,” etc.).
+An **intent** describes *what you want your workflow to accomplish* — not the low-level mechanics of making the model behave.
+
+It consists of a named collection of ordered steps, each representing a meaningful action in your workflow (e.g., “call the primary model,” “sanitize output,” “fallback to a cheaper model”).
 
 You define intents with `defineIntent()`, and the library guarantees deterministic, reliability-aware execution.
 
@@ -97,7 +99,8 @@ You define intents with `defineIntent()`, and the library guarantees determinist
 
 ### **Steps**
 
-A **step** is the smallest unit of work in an intent.  
+A **step** is the smallest unit of work in an intent.
+
 Each step declares:
 
 - an `id`  
@@ -106,8 +109,7 @@ Each step declares:
 - optional `timeoutMs`  
 - optional `fallbackTo` another step  
 
-Steps form a small DAG, where fallback paths create branching execution flows.  
-The goal is to describe intent; the engine handles control flow.
+Steps form a small DAG, where fallback paths create branching execution flows.
 
 ---
 
@@ -129,24 +131,124 @@ Each step receives a `ctx` object with:
 
 - **input** — the data passed to `runIntent()`  
 - **providers** — such as `ctx.providers.openai`  
-- **metadata** — optional user-defined information  
-- **telemetry emitter** — passed internally to log events  
+- **metada**
 
-This context is how your steps communicate with external systems while keeping the engine pure and testable.
+## OpenAI provider
+
+AI Reliability Layer includes a minimal OpenAI-style provider that exposes a single method:
+
+```ts
+ctx.providers.openai.chat({
+  model: string;
+  messages: { role: string; content: string }[];
+}) 
+```
+
+## Examples
+
+<!-- Links or snippets for:
+  - Basic intent with fallback
+  - Intent with retry + timeout
+  - Testing with a fake provider
+-->
 
 ---
 
-### **Telemetry**
+## Design philosophy
 
-The engine emits structured events during a run:
+AI systems fail in ways traditional software doesn't: they time out, return inconsistent results, exceed rate limits, or degrade silently as models evolve.  
+The goal of this library is to give developers a **reliability-first foundation** for building predictable AI workflows using simple, intent-based abstractions.
 
-- step start  
-- step success  
-- step failure  
-- retries  
-- timeouts  
-- fallback activations  
-- run completion  
+At its core, AI Reliability Layer follows three principles:
 
-You can attach a custom event sink to observe these in real time or store them for later debugging.  
-Telemetry is one of the most important pieces: it makes workflow behavior transparent.
+1. **Intent over mechanics**  
+   You describe *what* your workflow should accomplish.  
+   The engine decides *how* to execute it safely — with retries, timeouts, fallbacks, and clear telemetry.
+
+2. **Small surface area, strong guarantees**  
+   Instead of a heavy workflow platform, this library focuses on the primitives that matter most:  
+   deterministic execution, graceful degradation, and transparent observability.  
+   This keeps the package easy to learn, easy to test, and easy to trust.
+
+3. **Business resilience as a first-class goal**  
+   Reliable AI behavior directly maps to business outcomes:  
+   fewer failed requests, lower latency variability, predictable costs, and safer user-facing experiences.  
+   As organizations integrate more LLMs into critical paths, these guarantees compound into real operational stability.
+
+Looking ahead, reliability layers like this will become a **standard architectural building block** in AI applications — the same way queues, retries, and circuit breakers became foundational in distributed systems.  
+This library demonstrates that future, starting from a minimal, elegant core.
+
+## What’s intentionally not included (and why)
+
+To keep the v1 release focused, reliable, and easy to adopt, several powerful features were deliberately **excluded** from the MVP. These will be added in future versions, but only once the core intent engine is stable and well-tested.
+
+### ❌ YAML workflow definitions  
+**Why not in MVP:**  
+YAML introduces a full configuration surface area: schema validation, better error messages, type-safe loaders, ambiguous user expectations, and cross-platform parsing concerns.  
+This increases complexity without improving the core reliability story.
+
+**How it will be added:**  
+Once the JS API is proven, YAML will layer cleanly on top as a declarative syntax that compiles into the same internal intent representation. This preserves reliability while adding ergonomic configuration for larger workflows.
+
+---
+
+### ❌ Full DAG execution (fan-out, fan-in, branching, cycle detection)  
+**Why not in MVP:**  
+A production DAG engine requires dependency resolution, topological sorting, cycle detection, and error propagation rules. That’s a separate reliability product on its own.  
+MVP workflows rarely need branching beyond a fallback path.
+
+**How it will be added:**  
+The internal architecture already models steps as nodes; expanding to a full DAG is a natural evolution:  
+- `dependsOn` support  
+- static cycle detection  
+- parallelizable branches  
+- multi-path coordination  
+Future versions will upgrade the engine without changing the public API.
+
+---
+
+### ❌ Parallel execution  
+**Why not in MVP:**  
+Parallel execution adds concurrency control, cancellation strategy, and race-condition observability — unnecessary for the smallest reliable intent engine.
+
+**How it will be added:**  
+A parallel scheduler will sit behind the same intent definition, using a worker pool or Promise-based concurrency limits.
+
+---
+
+### ❌ Multi-provider orchestration (Anthropic, HTTP steps, chaining models)  
+**Why not in MVP:**  
+Adding multiple providers complicates context, error handling, cost modeling, and telemetry.  
+The goal of v1 is clarity, not breadth.
+
+**How it will be added:**  
+Providers will follow the same interface as `openai.chat()`, making swapping or extending trivial.
+
+---
+
+### ❌ Circuit breakers, rate-limiters, cost envelopes  
+**Why not in MVP:**  
+These are advanced reliability features that deserve careful design — they must be correct, composable, and observable.  
+Including them too early would dilute the quality of the core engine.
+
+**How it will be added:**  
+Future versions will introduce optional envelopes (e.g., max cost, max latency, max error rate) and failure budgets that wrap the existing retry/fallback logic.
+
+---
+
+### Why these exclusions matter  
+The **point** of the MVP is to ship a **tight, correct, professional-grade core**:  
+- deterministic execution  
+- retry/timeout/fallback  
+- telemetry  
+- one clean provider API  
+
+Everything else builds on this foundation.
+
+By intentionally keeping v1 small, the project avoids:  
+- shallow breadth  
+- inconsistent behavior  
+- half-finished features  
+- bloated surface area  
+
+This makes the library **trustworthy today and extensible tomorrow**.
