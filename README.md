@@ -86,6 +86,23 @@ console.log(result);
 AI Reliability Layer is intentionally small. It’s built around a few core ideas that make LLM workflows predictable, observable, and easy to reason about.
 
 ---
+## API reference
+
+The library intentionally exposes a tiny, predictable API surface.  
+These are the only functions and types you need to use the system end-to-end.
+
+---
+
+### `defineIntent(config)`
+
+Creates an intent definition that describes the steps, reliability policies, and fallbacks of a workflow.
+
+```ts
+const intent = defineIntent({
+  name: string,
+  steps: StepDefinition[],
+});
+```
 ## Architecture overview
 
 ```mermaid
