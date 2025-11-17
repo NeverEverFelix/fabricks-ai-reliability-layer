@@ -1,0 +1,14 @@
+# This workflow runs continuous integration checks for the AI Reliability Layer.
+# It triggers on every push to the main branch and on every pull request targeting main.
+# Purpose: ensure the library always builds, lint checks pass, tests pass, and TypeScript compiles.
+
+# Uses a single job called "build-and-test" executed on Ubuntu.
+# Matrix allows testing multiple Node versions; we currently stick to Node 20.x for stability.
+
+# Step 1: Check out the repository code so GitHub Actions has access to the files.
+# Step 2: Set up Node.js with caching enabled to speed up dependency installation.
+# Step 3: Install dependencies with `npm ci` for clean, reproducible installs tied to package-lock.json.
+# Step 4: Run ESLint to catch style issues and static analysis problems.
+# Step 5: Run the Vitest/Jest test suite to ensure functional correctness.
+# Step 6: Build the TypeScript project using the build config (usually tsconfig.build.json).
+# Step 7 (optional): Upload build artifacts (dist/) for inspection or debugging in CI.
