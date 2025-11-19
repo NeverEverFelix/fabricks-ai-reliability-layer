@@ -39,3 +39,70 @@
  * - normalized (has stepMap + concrete entryStepId)
  * - immutable (safe to share between requests / threads)
  */
+
+// src/core/intent.ts
+import type { Intent, IntentConfig, StepId } from "../types";
+
+export function defineIntent<Input = unknown, Output = unknown>(
+  config: IntentConfig<Input, Output>
+): Intent<Input, Output> {
+ 
+  if (!config || typeof config !== "object") {
+    throw new Error("Config must be an object");
+  }
+
+  
+  const { name, steps, entryStepId } = config;
+
+  
+  if (!name || typeof name !== "string") {
+    throw new Error("Intent must have a non-empty name");
+  }
+
+  
+  if (!Array.isArray(steps) || steps.length === 0) {
+    throw new Error(`defineIntent("${name}"): intent must have at least one step`);
+  }
+
+  // 5. Check each step has a unique id and a run() function
+  const ids = new Set<StepId>();
+
+  for (const step of steps) {
+    if (!step.id) {
+      throw new Error(`defineIntent("${name}"): found a step with no id`);
+    }
+
+    if (ids.has(step.id)) {
+      throw new Error(
+        `defineIntent("${name}"): duplicate step id "${step.id}"`
+      );
+    }
+
+    ids.add(step.id);
+
+    if (typeof step.run !== "function") {
+      throw new Error(
+        `defineIntent("${name}"): step "${step.id}" is missing a valid run() function`
+      );
+    }
+  }
+
+  
+  const finalEntryStepId: StepId = entryStepId ?? steps[0].id;
+
+  if (!ids.has(finalEntryStepId)) {
+    throw new Error(
+      `defineIntent("${name}"): entryStepId "${finalEntryStepId}" does not match any step id`
+    );
+  }
+
+  // 7. Build the final normalized Intent object
+  const normalized: Intent<Input, Output> = {
+    name,
+    steps: steps.slice(), // copy array so user can’t mutate ours
+    entryStepId: finalEntryStepId
+  };
+
+  // 8. Freeze to make it read-only
+  return Object.freeze(normalized);
+}
