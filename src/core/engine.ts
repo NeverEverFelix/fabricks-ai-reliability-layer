@@ -101,3 +101,7 @@
  * You will implement this AFTER all comments are done for each file
  * so the architecture remains extremely clean and intentional.
  */
+
+export function runIntent(){
+
+}

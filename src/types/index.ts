@@ -98,3 +98,51 @@
  * You implement this LAST, once all internals are complete,
  * so you know exactly what the clean public API should look like.
  */
+
+export type StepId = string;
+
+export interface StepConfig<Input = unknown, Output = unknown> {
+  id: StepId;
+  run: (ctx: ExecutionContext<Input>) => Promise<Output>;
+  retry?: { maxAttempts: number };
+  timeoutMs?: number;
+  fallbackTo?: StepId;
+}
+// describes a singe step in an intent, accepts genericas and then promises to eventually return an output
+export interface IntentConfig<Input = unknown, Output = unknown> {
+  name: string;
+  steps: StepConfig<Input, Output>[];
+  entryStepId?: StepId;
+}
+// how a user describes an intent, what the user pases to defineIntent
+
+export interface Intent<Input = unknown, Output = unknown>
+  extends IntentConfig<Input, Output> {} //what your library returns from defineIntent (validated, frozen, normalized).
+
+export interface ExecutionContext<Input = unknown> {
+  input: Input;
+  providers?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+}
+//what a step receives at runtime
+export interface TelemetryEvent {
+  type:
+    | "intent_started"
+    | "intent_finished"
+    | "step_started"
+    | "step_finished";
+  timestamp: number;
+  intentName: string;
+  stepId?: StepId;
+  success?: boolean;
+  error?: unknown;
+}
+
+export interface ExecutionResult<Output = unknown> {
+  intentName: string;
+  success: boolean;
+  output?: Output;
+  error?: unknown;
+  trace: TelemetryEvent[];
+}
+//what runIntent returns

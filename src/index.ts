@@ -20,3 +20,6 @@
  */
 
 // module.exports = require("./dist/index.js");
+
+export { defineIntent } from "./core/intent";
+export { runIntent } from "./core/engine";
