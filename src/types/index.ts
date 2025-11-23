@@ -99,12 +99,14 @@
  * so you know exactly what the clean public API should look like.
  */
 
+import { RetryPolicy } from "../core/policies";
+
 export type StepId = string;
 
 export interface StepConfig<Input = unknown, Output = unknown> {
   id: StepId;
   run: (ctx: ExecutionContext<Input>) => Promise<Output>;
-  retry?: { maxAttempts: number };
+  retry?: RetryPolicy;
   timeoutMs?: number;
   fallbackTo?: StepId;
 }
@@ -114,7 +116,7 @@ export interface IntentConfig<Input = unknown, Output = unknown> {
   steps: StepConfig<Input, Output>[];
   entryStepId?: StepId;
 }
-// how a user describes an intent, what the user pases to defineIntent
+// how a user describes an intent, what the user pases to defineIntent, configuration
 
 export interface Intent<Input = unknown, Output = unknown>
   extends IntentConfig<Input, Output> {} //what your library returns from defineIntent (validated, frozen, normalized).

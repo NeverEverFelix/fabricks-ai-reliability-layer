@@ -102,6 +102,156 @@
  * so the architecture remains extremely clean and intentional.
  */
 
-export function runIntent(){
+import type {
+    Intent,
+    ExecutionContext,
+    ExecutionResult,
+    TelemetryEvent,
+    StepConfig,
+    StepId,
+  } from "../types";
+  import { RetryPolicy, runWithRetry } from "./policies";
 
-}
+  export async function runIntent<Input, Output>(
+    intent: Intent<Input, Output>,
+    ctx: ExecutionContext<Input>
+  ): Promise<ExecutionResult<Output>> {
+    const trace: TelemetryEvent[] = [];
+    const { name, steps } = intent;
+  
+    const now = () => Date.now();
+  
+    // 1. No steps = fail fast
+    if (!steps || steps.length === 0) {
+      const error = new Error(`Intent "${name}" has no steps defined.`);
+  
+      trace.push({
+        type: "intent_started",
+        intentName: name,
+        timestamp: now(),
+      });
+  
+      trace.push({
+        type: "intent_finished",
+        intentName: name,
+        timestamp: now(),
+        success: false,
+        error,
+      });
+  
+      return {
+        intentName: name,
+        success: false,
+        error,
+        trace,
+      };
+    }
+  
+    // 2. Resolve entry step
+    const entryStepId: StepId | undefined = intent.entryStepId;
+    let stepToRun: StepConfig<Input, Output>;
+  
+    if (entryStepId) {
+      const found = steps.find((step) => step.id === entryStepId);
+  
+      if (!found) {
+        const error = new Error(
+          `entryStepId "${entryStepId}" does not match any step id.`
+        );
+  
+        trace.push({
+          type: "intent_started",
+          intentName: name,
+          timestamp: now(),
+        });
+  
+        trace.push({
+          type: "intent_finished",
+          intentName: name,
+          timestamp: now(),
+          success: false,
+          error,
+        });
+  
+        return {
+          intentName: name,
+          success: false,
+          error,
+          trace,
+        };
+      }
+  
+      stepToRun = found;
+    } else {
+      stepToRun = steps[0];
+    }
+  
+    // 3. Telemetry: start intent + step
+    trace.push({
+      type: "intent_started",
+      intentName: name,
+      timestamp: now(),
+    });
+  
+    trace.push({
+      type: "step_started",
+      intentName: name,
+      stepId: stepToRun.id,
+      timestamp: now(),
+    });
+  
+    // 4. Run the step (no retry/timeout/fallback yet)
+    try {
+      const output = await runWithRetry (
+       () => stepToRun.run(ctx),
+       stepToRun.retry,
+      );
+  
+      trace.push({
+        type: "step_finished",
+        intentName: name,
+        stepId: stepToRun.id,
+        timestamp: now(),
+        success: true,
+      });
+  
+      trace.push({
+        type: "intent_finished",
+        intentName: name,
+        timestamp: now(),
+        success: true,
+      });
+  
+      return {
+        intentName: name,
+        success: true,
+        output,
+        trace,
+      };
+    } catch (error) {
+      trace.push({
+        type: "step_finished",
+        intentName: name,
+        stepId: stepToRun.id,
+        timestamp: now(),
+        success: false,
+        error,
+      });
+  
+      trace.push({
+        type: "intent_finished",
+        intentName: name,
+        timestamp: now(),
+        success: false,
+        error,
+      });
+  
+      return {
+        intentName: name,
+        success: false,
+        error,
+        trace,
+      };
+    }
+  }
+  

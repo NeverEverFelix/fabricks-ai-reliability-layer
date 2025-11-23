@@ -111,3 +111,37 @@
  * Without this file, the engine would become bloated and unreadable.
  * With it, your entire system becomes extensible, testable, and clean.
  */
+
+
+export interface RetryPolicy {
+    maxAttemps: number;
+}
+export async function runWithRetry<T>(
+    fn: () => Promise<T>,
+    policy?: RetryPolicy
+  ): Promise<T> {
+    // pick a safe number of attempts
+    const maxAttempts =
+      policy && policy.maxAttemps > 0 ? policy.maxAttemps : 1;
+  
+    let lastError: unknown;
+  
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        // If fn() succeeds, we return immediately
+        return await fn();
+      } catch (error) {
+        lastError = error;
+  
+        // If this was the last attempt → throw the error
+        if (attempt === maxAttempts) {
+          throw lastError;
+        }
+  
+        // Otherwise continue loop and retry
+      }
+    }
+  
+    // Should never reach this point
+    throw lastError ?? new Error("Unknown retry failure");
+  }
