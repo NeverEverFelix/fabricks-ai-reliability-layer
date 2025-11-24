@@ -117,13 +117,14 @@ export interface RetryPolicy {
     maxAttemps: number;
 }
 
-import { TelemetrySink, TelemetryEvent } from "../types";
+import { TelemetrySink, TelemetryEvent, StepId } from "../types";
 
 export async function runWithRetry<T>(
   fn: () => Promise<T>,
+  telemetry?: TelemetrySink,
   intentName?: string,
+  stepId?: string,
   policy?: RetryPolicy,
-  telemetry?: TelemetrySink
 ): Promise<T> {
   const maxAttempts =
     policy && policy.maxAttemps > 0 ? policy.maxAttemps : 1;
@@ -135,8 +136,7 @@ export async function runWithRetry<T>(
     telemetry?.({
       type: "retry_attempt_started",
       intentName: intentName ?? "(unknown-intent)",
-      attempt,
-      maxAttempts,
+      stepId,
       timestamp: Date.now(),
     });
 

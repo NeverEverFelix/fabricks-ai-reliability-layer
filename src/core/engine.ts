@@ -204,7 +204,7 @@ import type {
     // 4. Run primary step with retry + timeout, then optional fallback
     try {
       const output = await runWithRetry(
-        () => runWithTimeout(() => stepToRun.run(ctx), stepToRun.timeoutMs),ctx.telemetry,name ,
+        () => runWithTimeout(() => stepToRun.run(ctx), stepToRun.timeoutMs),ctx.telemetry,name , stepToRun.id,
         stepToRun.retry
       );
   
