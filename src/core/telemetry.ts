@@ -118,3 +118,10 @@
  * to
  *     **a real orchestration engine with observability baked in.**
  */
+import { TelemetryEvent } from "../types";
+
+export type TelemetrySink = (event: TelemetryEvent) => void;
+
+export const consoleTelemetrySink: TelemetrySink = (event) => {
+    console.log("[telemetry]", JSON.stringify(event));
+  };

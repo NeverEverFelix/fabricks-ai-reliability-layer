@@ -112,36 +112,77 @@
  * With it, your entire system becomes extensible, testable, and clean.
  */
 
-
+import { consoleTelemetrySink} from "./telemetry";
 export interface RetryPolicy {
     maxAttemps: number;
 }
+
+import { TelemetrySink, TelemetryEvent } from "../types";
+
 export async function runWithRetry<T>(
-    fn: () => Promise<T>,
-    policy?: RetryPolicy
-  ): Promise<T> {
-    // pick a safe number of attempts
-    const maxAttempts =
-      policy && policy.maxAttemps > 0 ? policy.maxAttemps : 1;
-  
-    let lastError: unknown;
-  
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      try {
-        // If fn() succeeds, we return immediately
-        return await fn();
-      } catch (error) {
-        lastError = error;
-  
-        // If this was the last attempt → throw the error
-        if (attempt === maxAttempts) {
-          throw lastError;
-        }
-  
-        // Otherwise continue loop and retry
+  fn: () => Promise<T>,
+  intentName?: string,
+  policy?: RetryPolicy,
+  telemetry?: TelemetrySink
+): Promise<T> {
+  const maxAttempts =
+    policy && policy.maxAttemps > 0 ? policy.maxAttemps : 1;
+
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    // Emit telemetry for retry attempt start
+    telemetry?.({
+      type: "retry_attempt_started",
+      intentName: intentName ?? "(unknown-intent)",
+      attempt,
+      maxAttempts,
+      timestamp: Date.now(),
+    });
+
+    try {
+      const result = await fn();
+      return result;
+    } catch (error) {
+      lastError = error;
+
+      if (attempt === maxAttempts) {
+        throw lastError;
       }
+
+      // (Later: emit retry_attempt_failed)
     }
-  
-    // Should never reach this point
-    throw lastError ?? new Error("Unknown retry failure");
   }
+
+  throw lastError ?? new Error("Unknown retry failure");
+}
+
+export async function runWithTimeout<T>( // promise orchestrator / Promise arbitration
+  fn: () => Promise<T>,
+  timeoutMs?: number
+): Promise<T> {
+  // If no timeout or invalid timeout, just run the function directly
+  if (timeoutMs == null || timeoutMs <= 0) {
+    return fn();
+  }
+
+  return new Promise<T>((resolve, reject) => {
+    // TODO: emit telemetry: timeout_started (timeoutMs)
+    const timer = setTimeout(() => {
+      // TODO: emit telemetry: timeout_fired
+      reject(new Error(`Operation failed with timeout ${timeoutMs}ms`));
+    }, timeoutMs);
+
+    fn()
+      .then((result) => {
+        clearTimeout(timer);
+        // TODO: emit telemetry: timeout_cleared
+        resolve(result);
+      })
+      .catch((err) => {
+        clearTimeout(timer);
+        // TODO: emit telemetry: timeout_cleared
+        reject(err);
+      });
+  });
+}

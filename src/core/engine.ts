@@ -110,7 +110,8 @@ import type {
     StepConfig,
     StepId,
   } from "../types";
-  import { RetryPolicy, runWithRetry } from "./policies";
+  import { RetryPolicy, runWithRetry, runWithTimeout } from "./policies";
+  import { TelemetrySink } from "./telemetry";
 
   export async function runIntent<Input, Output>(
     intent: Intent<Input, Output>,
@@ -186,7 +187,7 @@ import type {
       stepToRun = steps[0];
     }
   
-    // 3. Telemetry: start intent + step
+    // 3. Telemetry: start intent + primary step
     trace.push({
       type: "intent_started",
       intentName: name,
@@ -200,11 +201,11 @@ import type {
       timestamp: now(),
     });
   
-    // 4. Run the step (no retry/timeout/fallback yet)
+    // 4. Run primary step with retry + timeout, then optional fallback
     try {
-      const output = await runWithRetry (
-       () => stepToRun.run(ctx),
-       stepToRun.retry,
+      const output = await runWithRetry(
+        () => runWithTimeout(() => stepToRun.run(ctx), stepToRun.timeoutMs),ctx.telemetry,name ,
+        stepToRun.retry
       );
   
       trace.push({
@@ -229,6 +230,69 @@ import type {
         trace,
       };
     } catch (error) {
+      const fallbackStepId = stepToRun.fallbackTo;
+  
+      // No fallback configured → intent fails
+      if (!fallbackStepId) {
+        trace.push({
+          type: "step_finished",
+          intentName: name,
+          stepId: stepToRun.id,
+          timestamp: now(),
+          success: false,
+          error,
+        });
+  
+        trace.push({
+          type: "intent_finished",
+          intentName: name,
+          timestamp: now(),
+          success: false,
+          error,
+        });
+  
+        return {
+          intentName: name,
+          success: false,
+          error,
+          trace,
+        };
+      }
+  
+      // Resolve fallback step
+      const fallbackStep = steps.find((s) => s.id === fallbackStepId);
+  
+      if (!fallbackStep) {
+        const fallbackError = new Error(
+          `fallbackTo "${fallbackStepId}" does not match any step id.`
+        );
+  
+        trace.push({
+          type: "step_finished",
+          intentName: name,
+          stepId: stepToRun.id,
+          timestamp: now(),
+          success: false,
+          error: fallbackError,
+        });
+  
+        trace.push({
+          type: "intent_finished",
+          intentName: name,
+          timestamp: now(),
+          success: false,
+          error: fallbackError,
+        });
+  
+        return {
+          intentName: name,
+          success: false,
+          error: fallbackError,
+          trace,
+        };
+      }
+  
+      // Telemetry: primary failed, now starting fallback step
       trace.push({
         type: "step_finished",
         intentName: name,
@@ -239,19 +303,69 @@ import type {
       });
   
       trace.push({
-        type: "intent_finished",
+        type: "step_started",
         intentName: name,
+        stepId: fallbackStep.id,
         timestamp: now(),
-        success: false,
-        error,
       });
   
-      return {
-        intentName: name,
-        success: false,
-        error,
-        trace,
-      };
+      // Run fallback step with same retry + timeout pipeline
+      try {
+        const fallbackOutput = await runWithRetry(
+          () =>
+            runWithTimeout(
+              () => fallbackStep.run(ctx),
+              fallbackStep.timeoutMs
+            ),
+          fallbackStep.retry
+        );
+  
+        trace.push({
+          type: "step_finished",
+          intentName: name,
+          stepId: fallbackStep.id,
+          timestamp: now(),
+          success: true,
+        });
+  
+        trace.push({
+          type: "intent_finished",
+          intentName: name,
+          timestamp: now(),
+          success: true,
+        });
+  
+        return {
+          intentName: name,
+          success: true,
+          output: fallbackOutput,
+          trace,
+        };
+      } catch (fallbackError) {
+        trace.push({
+          type: "step_finished",
+          intentName: name,
+          stepId: fallbackStep.id,
+          timestamp: now(),
+          success: false,
+          error: fallbackError,
+        });
+  
+        trace.push({
+          type: "intent_finished",
+          intentName: name,
+          timestamp: now(),
+          success: false,
+          error: fallbackError,
+        });
+  
+        return {
+          intentName: name,
+          success: false,
+          error: fallbackError,
+          trace,
+        };
+      }
     }
   }
   

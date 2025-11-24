@@ -100,7 +100,7 @@
  */
 
 import { RetryPolicy } from "../core/policies";
-
+import { TelemetrySink } from "../core/telemetry";
 export type StepId = string;
 
 export interface StepConfig<Input = unknown, Output = unknown> {
@@ -125,6 +125,7 @@ export interface ExecutionContext<Input = unknown> {
   input: Input;
   providers?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
+  telemetry?: TelemetrySink;
 }
 //what a step receives at runtime
 export interface TelemetryEvent {
@@ -132,7 +133,9 @@ export interface TelemetryEvent {
     | "intent_started"
     | "intent_finished"
     | "step_started"
-    | "step_finished";
+    | "step_finished"
+    | "retry_attempt_started"
+    | "retry_attempt_failed";
   timestamp: number;
   intentName: string;
   stepId?: StepId;
@@ -146,5 +149,8 @@ export interface ExecutionResult<Output = unknown> {
   output?: Output;
   error?: unknown;
   trace: TelemetryEvent[];
+  telemetry?: TelemetrySink;
 }
+
+export { TelemetrySink };
 //what runIntent returns
