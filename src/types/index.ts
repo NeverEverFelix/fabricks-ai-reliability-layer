@@ -135,7 +135,10 @@ export interface TelemetryEvent {
     | "step_started"
     | "step_finished"
     | "retry_attempt_started"
-    | "retry_attempt_failed";
+    | "retry_attempt_failed"
+    | "timeout_started"
+    | "timeout_fired"
+    | "timeout_cleared"
   timestamp: number;
   intentName: string;
   stepId?: StepId;
@@ -149,7 +152,6 @@ export interface ExecutionResult<Output = unknown> {
   output?: Output;
   error?: unknown;
   trace: TelemetryEvent[];
-  telemetry?: TelemetrySink;
 }
 
 export { TelemetrySink };

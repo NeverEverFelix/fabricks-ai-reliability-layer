@@ -157,31 +157,63 @@ export async function runWithRetry<T>(
   throw lastError ?? new Error("Unknown retry failure");
 }
 
-export async function runWithTimeout<T>( // promise orchestrator / Promise arbitration
+export async function runWithTimeout<T>(
   fn: () => Promise<T>,
-  timeoutMs?: number
+  timeoutMs?: number,
+  telemetry?: TelemetrySink,
+  intentName?: string,
+  stepId?: string
 ): Promise<T> {
   // If no timeout or invalid timeout, just run the function directly
   if (timeoutMs == null || timeoutMs <= 0) {
     return fn();
   }
 
+  const now = () => Date.now();
+  const safeIntentName = intentName ?? "(unknown-intent)";
+
+  // timeout_started
+  telemetry?.({
+    type: "timeout_started",
+    intentName: safeIntentName,
+    stepId,
+    timestamp: now(),
+  });
+
   return new Promise<T>((resolve, reject) => {
-    // TODO: emit telemetry: timeout_started (timeoutMs)
     const timer = setTimeout(() => {
-      // TODO: emit telemetry: timeout_fired
+      // timeout_fired
+      telemetry?.({
+        type: "timeout_fired",
+        intentName: safeIntentName,
+        stepId,
+        timestamp: now(),
+      });
+
       reject(new Error(`Operation failed with timeout ${timeoutMs}ms`));
     }, timeoutMs);
 
     fn()
       .then((result) => {
         clearTimeout(timer);
-        // TODO: emit telemetry: timeout_cleared
+        // timeout_cleared
+        telemetry?.({
+          type: "timeout_cleared",
+          intentName: safeIntentName,
+          stepId,
+          timestamp: now(),
+        });
         resolve(result);
       })
       .catch((err) => {
         clearTimeout(timer);
-        // TODO: emit telemetry: timeout_cleared
+        // timeout_cleared
+        telemetry?.({
+          type: "timeout_cleared",
+          intentName: safeIntentName,
+          stepId,
+          timestamp: now(),
+        });
         reject(err);
       });
   });

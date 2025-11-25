@@ -94,3 +94,4 @@
  *
  *   PUBLIC ←→ STABLE  (src/index.ts)
  *   INTERNA*
+*/

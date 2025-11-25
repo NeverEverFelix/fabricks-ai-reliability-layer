@@ -11,6 +11,6 @@
       "skipLibCheck": true,
       "resolveJsonModule": true
     },
-    "include": ["src", "tests", "examples"]
+    "include": ["src", "tests", "examples", "tests/core/timeoutHarness.ts"]
   }
   

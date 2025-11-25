@@ -119,6 +119,12 @@ import type {
   ): Promise<ExecutionResult<Output>> {
     const trace: TelemetryEvent[] = [];
     const { name, steps } = intent;
+    const telemetrySink= ctx.telemetry;
+
+    const emit=(event :TelemetryEvent) => { 
+        trace.push(event);
+      telemetrySink?.(event);
+    };
   
     const now = () => Date.now();
   
@@ -126,13 +132,13 @@ import type {
     if (!steps || steps.length === 0) {
       const error = new Error(`Intent "${name}" has no steps defined.`);
   
-      trace.push({
+      emit({
         type: "intent_started",
         intentName: name,
         timestamp: now(),
       });
   
-      trace.push({
+      emit({
         type: "intent_finished",
         intentName: name,
         timestamp: now(),
@@ -160,13 +166,13 @@ import type {
           `entryStepId "${entryStepId}" does not match any step id.`
         );
   
-        trace.push({
+        emit({
           type: "intent_started",
           intentName: name,
           timestamp: now(),
         });
   
-        trace.push({
+        emit({
           type: "intent_finished",
           intentName: name,
           timestamp: now(),
@@ -188,13 +194,13 @@ import type {
     }
   
     // 3. Telemetry: start intent + primary step
-    trace.push({
+    emit({
       type: "intent_started",
       intentName: name,
       timestamp: now(),
     });
   
-    trace.push({
+    emit({
       type: "step_started",
       intentName: name,
       stepId: stepToRun.id,
@@ -204,11 +210,20 @@ import type {
     // 4. Run primary step with retry + timeout, then optional fallback
     try {
       const output = await runWithRetry(
-        () => runWithTimeout(() => stepToRun.run(ctx), stepToRun.timeoutMs),ctx.telemetry,name , stepToRun.id,
-        stepToRun.retry
-      );
+        () => runWithTimeout(
+          () => stepToRun.run(ctx),
+          stepToRun.timeoutMs,
+          ctx.telemetry,
+          name,
+          stepToRun.id
+        ),
+      ctx.telemetry,
+      name,
+      stepToRun.id,
+      stepToRun.retry
+    );
   
-      trace.push({
+      emit({
         type: "step_finished",
         intentName: name,
         stepId: stepToRun.id,
@@ -216,7 +231,7 @@ import type {
         success: true,
       });
   
-      trace.push({
+      emit({
         type: "intent_finished",
         intentName: name,
         timestamp: now(),
@@ -234,7 +249,7 @@ import type {
   
       // No fallback configured → intent fails
       if (!fallbackStepId) {
-        trace.push({
+        emit({
           type: "step_finished",
           intentName: name,
           stepId: stepToRun.id,
@@ -243,7 +258,7 @@ import type {
           error,
         });
   
-        trace.push({
+        emit({
           type: "intent_finished",
           intentName: name,
           timestamp: now(),
@@ -267,7 +282,7 @@ import type {
           `fallbackTo "${fallbackStepId}" does not match any step id.`
         );
   
-        trace.push({
+        emit({
           type: "step_finished",
           intentName: name,
           stepId: stepToRun.id,
@@ -276,7 +291,7 @@ import type {
           error: fallbackError,
         });
   
-        trace.push({
+          emit({
           type: "intent_finished",
           intentName: name,
           timestamp: now(),
@@ -293,7 +308,7 @@ import type {
       }
   
       // Telemetry: primary failed, now starting fallback step
-      trace.push({
+        emit({
         type: "step_finished",
         intentName: name,
         stepId: stepToRun.id,
@@ -302,7 +317,7 @@ import type {
         error,
       });
   
-      trace.push({
+        emit({
         type: "step_started",
         intentName: name,
         stepId: fallbackStep.id,
@@ -312,15 +327,17 @@ import type {
       // Run fallback step with same retry + timeout pipeline
       try {
         const fallbackOutput = await runWithRetry(
-          () =>
-            runWithTimeout(
-              () => fallbackStep.run(ctx),
-              fallbackStep.timeoutMs
-            ),
-          fallbackStep.retry
-        );
+          () => runWithTimeout(
+            () => fallbackStep.run(ctx),
+            fallbackStep.timeoutMs
+          ),
+        ctx.telemetry,
+        name,
+        fallbackStep.id,
+        fallbackStep.retry
+      );
   
-        trace.push({
+          emit({
           type: "step_finished",
           intentName: name,
           stepId: fallbackStep.id,
@@ -328,7 +345,7 @@ import type {
           success: true,
         });
   
-        trace.push({
+          emit({
           type: "intent_finished",
           intentName: name,
           timestamp: now(),
@@ -342,7 +359,7 @@ import type {
           trace,
         };
       } catch (fallbackError) {
-        trace.push({
+          emit({
           type: "step_finished",
           intentName: name,
           stepId: fallbackStep.id,
@@ -351,7 +368,7 @@ import type {
           error: fallbackError,
         });
   
-        trace.push({
+          emit({
           type: "intent_finished",
           intentName: name,
           timestamp: now(),
@@ -368,4 +385,8 @@ import type {
       }
     }
   }
+  
+
+  
+    
   
