@@ -139,11 +139,13 @@ export interface TelemetryEvent {
     | "timeout_started"
     | "timeout_fired"
     | "timeout_cleared"
+    
   timestamp: number;
   intentName: string;
   stepId?: StepId;
   success?: boolean;
   error?: unknown;
+  attempt?: number
 }
 
 export interface ExecutionResult<Output = unknown> {

@@ -137,6 +137,7 @@ export async function runWithRetry<T>(
       type: "retry_attempt_started",
       intentName: intentName ?? "(unknown-intent)",
       stepId,
+      attempt,
       timestamp: Date.now(),
     });
 
@@ -149,8 +150,14 @@ export async function runWithRetry<T>(
       if (attempt === maxAttempts) {
         throw lastError;
       }
-
-      // (Later: emit retry_attempt_failed)
+      telemetry?.({
+        type:"retry_attempt_failed",
+        intentName: intentName ?? "(unknown-intent)",
+        stepId,
+        attempt,
+        error:error,
+        timestamp: Date.now()
+      });
     }
   }
 

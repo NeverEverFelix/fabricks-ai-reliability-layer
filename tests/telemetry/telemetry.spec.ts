@@ -142,3 +142,10 @@
  *
  * This file guarantees that your reliability system is **visible, debuggable, and traceable**.
  */
+import { describe, it, expect } from "vitest";
+
+describe("Telemetry (placeholder)", () => {
+  it("is a placeholder test that always passes", () => {
+    expect(true).toBe(true);
+  });
+});

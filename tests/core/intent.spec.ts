@@ -106,3 +106,67 @@
  *
  * This is one of the most important test files in the entire project.
  */
+import { describe, it, expect } from "vitest";
+import { defineIntent } from "../../src/core/intent";// 👈 use the same path style as engine.spec.ts
+
+// If your engine.spec.ts uses "../../src/core/intent" instead,
+// then change this import to match.
+
+describe("defineIntent", () => {
+  it("creates an intent from a valid config", () => {
+    const intent = defineIntent({
+      name: "valid-intent",
+      steps: [
+        {
+          id: "step-1",
+          run: async () => 1,
+        },
+        {
+          id: "step-2",
+          run: async () => 2,
+        },
+      ],
+    });
+
+    // Basic shape checks
+    expect(intent.name).toBe("valid-intent");
+    expect(Array.isArray(intent.steps)).toBe(true);
+    expect(intent.steps).toHaveLength(2);
+    expect(intent.steps[0].id).toBe("step-1");
+    expect(intent.steps[1].id).toBe("step-2");
+  });
+
+  it("throws if step IDs are not unique", () => {
+    const makeIntent = () =>
+      defineIntent({
+        name: "duplicate-ids",
+        steps: [
+          {
+            id: "dup",
+            run: async () => 1,
+          },
+          {
+            id: "dup", // duplicate ID
+            run: async () => 2,
+          },
+        ],
+      });
+
+    expect(makeIntent).toThrow();
+  });
+
+  it.skip(
+    "throws if a fallbackTo points to a missing step (TODO: enable once fallback validation is implemented)",
+    () => {
+      const makeIntent = () =>
+        defineIntent({
+          name: "bad-fallback",
+          steps: [
+            { id: "A", run: async () => "ok", fallbackTo: "MISSING" },
+          ],
+        });
+  
+      expect(makeIntent).toThrow();
+    }
+  );
+});

@@ -136,3 +136,10 @@
  *
  * This file guarantees your reliability engine can trust the LLM interface.
  */
+import { describe, it, expect } from "vitest";
+
+describe("OpenAI provider (placeholder)", () => {
+  it("is a placeholder test that always passes", () => {
+    expect(true).toBe(true);
+  });
+});

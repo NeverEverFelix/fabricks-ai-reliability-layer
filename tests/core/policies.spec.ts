@@ -123,3 +123,59 @@
  * With good tests here, the reliability layer becomes mathematically correct,
  * and engine.ts becomes easier to reason about and maintain.
  */
+import { describe, it, expect } from "vitest";
+// Match the same style/path you use in engine.spec.ts
+import { runWithRetry, runWithTimeout } from "../../src/core/policies";
+
+describe("runWithRetry", () => {
+  it("executes the function once and returns its result when no policy is provided", async () => {
+    let callCount = 0;
+
+    const fn = async () => {
+      callCount += 1;
+      return "ok";
+    };
+
+    const result = await runWithRetry(fn); // no policy passed
+
+    expect(result).toBe("ok");
+    expect(callCount).toBe(1); // only called once, no retries without policy
+  });
+
+  it("propagates errors from the wrapped function when it throws", async () => {
+    let callCount = 0;
+
+    const alwaysFail = async () => {
+      callCount += 1;
+      throw new Error("boom");
+    };
+
+    await expect(runWithRetry(alwaysFail)).rejects.toThrow("boom");
+
+    // still only one attempt in the no-policy case
+    expect(callCount).toBe(1);
+  });
+});
+
+describe("runWithTimeout", () => {
+  it("resolves if the function finishes before the timeout", async () => {
+    const fast = async () => {
+      return "fast";
+    };
+
+    const result = await runWithTimeout(fast, 50); // 50ms timeout
+
+    expect(result).toBe("fast");
+  });
+
+  it("rejects if the function does not finish before the timeout", async () => {
+    const slow = async () =>
+      new Promise<string>((resolve) => {
+        setTimeout(() => resolve("too late"), 50);
+      });
+
+    await expect(
+      runWithTimeout(slow, 10), // 10ms timeout, slower promise
+    ).rejects.toThrow();
+  });
+});

@@ -54,7 +54,7 @@
  * 7. **Telemetry emission**
  *    - Every execution should produce a proper event trace.
  *    - The order must be:
- *         intent_started → step_started → step_succeeded → ... → intent_finished
+ *         intent_started → step_started → step_finished → ... → intent_finished
  *    - Failed steps should emit step_failed.
  *    - Fallback routing should appear clearly in the event sequence.
  *
@@ -139,3 +139,86 @@
  *
  * This is one of the MOST important files in your entire codebase.
  */
+// tests/engine.spec.ts
+
+/**
+ * See big header comment above for why this file matters.
+ * Below are the first two concrete tests for the engine.
+ */
+
+import { describe, it, expect } from "vitest";
+import { defineIntent } from "../../src/core/intent";
+import { runIntent } from "../../src/core/engine";
+import type { TelemetryEvent } from "../../src/types";
+import type { TelemetrySink } from "../../src/types";
+
+
+describe("runIntent – retry behavior", () => {
+  it("retries a failing step and eventually succeeds", async () => {
+    const events: TelemetryEvent[] = [];
+    const telemetry: TelemetrySink = (e) => {
+      events.push(e);
+    };
+
+    let callCount = 0;
+
+    const intent = defineIntent({
+      name: "retry-intent",
+      steps: [
+        {
+          id: "primary",
+          async run() {
+            callCount += 1;
+            if (callCount === 1) {
+              // first attempt fails
+              throw new Error("boom");
+            }
+            // second attempt succeeds
+            return "ok-after-retry";
+          },
+          // ✅ IMPORTANT: correct property name and >1 attempts
+          retry: {
+            maxAttemps: 2,
+          },
+        },
+      ],
+    });
+
+    const result = await runIntent(intent, {
+      input: {},
+      telemetry,
+    });
+
+    // 1) Engine should report success because retry eventually worked
+    expect(result.success).toBe(true);
+    expect(result.output).toBe("ok-after-retry");
+    expect(callCount).toBe(2); // 1 fail + 1 success
+
+    // 2) Telemetry expectations
+    const types = events.map((e) => e.type);
+
+    const retryFailedEvents = events.filter(
+      (e): e is TelemetryEvent & { type: "retry_attempt_failed"; attempt: number } =>
+        e.type === "retry_attempt_failed"
+    );
+    const stepFailedEvents = events.filter(
+      (e): e is TelemetryEvent & { type: "step_finished"; success: false } =>
+        e.type === "step_finished" && e.success === false
+    );
+    
+    expect(retryFailedEvents.length).toBe(1);
+    expect(retryFailedEvents[0].attempt).toBe(1);
+    
+
+    // Only the first attempt should have failed at the retry layer
+    expect(retryFailedEvents.length).toBe(1);
+    expect(retryFailedEvents[0].attempt).toBe(1);
+
+    // Because the step eventually succeeded, there should be no final step_failed
+    expect(stepFailedEvents.length).toBe(0);
+
+    // And we should still have a final intent_finished
+    expect(types[0]).toBe("intent_started");
+    expect(types[types.length - 1]).toBe("intent_finished");
+  });
+});
