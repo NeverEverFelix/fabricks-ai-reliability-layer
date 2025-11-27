@@ -38,61 +38,95 @@ The library guarantees it runs predictably.**
 
 Install the package:
 ```bash
-npm install ai-reliability-layer
+npm install fabricks-ai-reliability-layer
 ```
-Example Usage
+Minimal Example Usage
 ```bash
 
 
-import { defineIntent, runIntent } from "ai-reliability-layer";
+import { defineIntent, runIntent } from "fabricks-ai-reliability-layer";
 
-const getAnswer = defineIntent({
-  name: "getAnswer",
+// A simple intent with one step
+const greetIntent = defineIntent<{ name: string }, string>({
+  name: "greet",
   steps: [
     {
-      id: "primary",
-      run: async (ctx) =>
-        ctx.providers.openai.chat({
+      id: "sayHello",
+      async run(ctx) {
+        return `Hello, ${ctx.input.name}!`;
+      },
+    },
+  ],
+  entryStepId: "sayHello",
+});
+
+const result = await runIntent(greetIntent, {
+  input: { name: "Felix" },
+  telemetry: console.log,
+});
+
+console.log(result.output); // "Hello, Felix!"
+
+```
+## Realistic Example
+```ts
+const answerIntent = defineIntent<{ question: string }, string>({
+  name: "answer-intent",
+  steps: [
+    {
+      id: "ask-primary",
+      retry: { maxAttemps: 2 },
+      timeoutMs: 5000,
+      fallbackTo: "ask-fallback",
+      async run(ctx) {
+        return ctx.providers.openai.complete({
           model: "gpt-4.1-mini",
           messages: [
             { role: "system", content: "You are a concise assistant." },
             { role: "user", content: ctx.input.question },
           ],
-        }),
-      retry: { maxAttempts: 2 },
-      timeoutMs: 5000,
-      fallbackTo: "fallback",
+        });
+      },
     },
+
     {
-      id: "fallback",
-      run: async (ctx) =>
-        ctx.providers.openai.chat({
+      id: "ask-fallback",
+      async run(ctx) {
+        return ctx.providers.openai.complete({
           model: "gpt-4o-mini",
           messages: [
             { role: "system", content: "Fallback model. Be brief." },
             { role: "user", content: ctx.input.question },
           ],
-        }),
+        });
+      },
     },
   ],
+  entryStepId: "ask-primary",
 });
 
-const result = await runIntent(getAnswer, {
-  question: "Why Kaniko over DinD?",
+// Running it
+const result = await runIntent(answerIntent, {
+  input: { question: "Why Kaniko over DinD?" },
+  providers: {
+    openai: myReliableOpenAIProvider,
+  },
 });
-
-console.log(result);
 ```
 
 ## Core concepts
 
-AI Reliability Layer is intentionally small. It’s built around a few core ideas that make LLM workflows predictable, observable, and easy to reason about.
+Fabricks AI Reliability Layer is intentionally small only exposing a tiny, predictable API surface. It’s built around a few core ideas that make LLM workflows predictable, observable, and easy to reason about.
 
 ---
-## API reference
+## Intents
 
-The library intentionally exposes a tiny, predictable API surface.  
-These are the only functions and types you need to use the system end-to-end.
+A named workflow composed of ordered steps.
+
+---
+## Steps
+
+The smallest unit of execution.
 
 ---
 
