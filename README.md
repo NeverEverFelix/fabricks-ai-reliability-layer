@@ -37,9 +37,9 @@ The library guarantees it runs predictably.**
 ## Quick start
 
 Install the package:
-
+```bash
 npm install ai-reliability-layer
-
+```
 Example Usage
 ```bash
 
