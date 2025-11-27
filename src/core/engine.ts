@@ -119,16 +119,16 @@ import type {
   ): Promise<ExecutionResult<Output>> {
     const trace: TelemetryEvent[] = [];
     const { name, steps } = intent;
-    const telemetrySink= ctx.telemetry;
-
-    const emit=(event :TelemetryEvent) => { 
-        trace.push(event);
+    const telemetrySink = ctx.telemetry;
+  
+    const emit = (event: TelemetryEvent) => {
+      trace.push(event);
       telemetrySink?.(event);
     };
   
     const now = () => Date.now();
   
-    // 1. No steps = fail fast
+    // 1. No steps = fail fast (preserve previous behavior)
     if (!steps || steps.length === 0) {
       const error = new Error(`Intent "${name}" has no steps defined.`);
   
@@ -154,239 +154,273 @@ import type {
       };
     }
   
-    // 2. Resolve entry step
-    const entryStepId: StepId | undefined = intent.entryStepId;
-    let stepToRun: StepConfig<Input, Output>;
+    // 2. Resolve entry step (preserve entryStepId semantics)
+    const entryStepId: StepId = intent.entryStepId ?? steps[0].id;
+    const entryStep = steps.find((step) => step.id === entryStepId);
   
-    if (entryStepId) {
-      const found = steps.find((step) => step.id === entryStepId);
-  
-      if (!found) {
-        const error = new Error(
-          `entryStepId "${entryStepId}" does not match any step id.`
-        );
-  
-        emit({
-          type: "intent_started",
-          intentName: name,
-          timestamp: now(),
-        });
-  
-        emit({
-          type: "intent_finished",
-          intentName: name,
-          timestamp: now(),
-          success: false,
-          error,
-        });
-  
-        return {
-          intentName: name,
-          success: false,
-          error,
-          trace,
-        };
-      }
-  
-      stepToRun = found;
-    } else {
-      stepToRun = steps[0];
-    }
-  
-    // 3. Telemetry: start intent + primary step
-    emit({
-      type: "intent_started",
-      intentName: name,
-      timestamp: now(),
-    });
-  
-    emit({
-      type: "step_started",
-      intentName: name,
-      stepId: stepToRun.id,
-      timestamp: now(),
-    });
-  
-    // 4. Run primary step with retry + timeout, then optional fallback
-    try {
-      const output = await runWithRetry(
-        () => runWithTimeout(
-          () => stepToRun.run(ctx),
-          stepToRun.timeoutMs,
-          ctx.telemetry,
-          name,
-          stepToRun.id
-        ),
-      ctx.telemetry,
-      name,
-      stepToRun.id,
-      stepToRun.retry
-    );
+    if (!entryStep) {
+      const error = new Error(
+        `entryStepId "${entryStepId}" does not match any step id.`
+      );
   
       emit({
-        type: "step_finished",
+        type: "intent_started",
         intentName: name,
-        stepId: stepToRun.id,
         timestamp: now(),
-        success: true,
       });
   
       emit({
         type: "intent_finished",
         intentName: name,
         timestamp: now(),
-        success: true,
+        success: false,
+        error,
       });
   
       return {
         intentName: name,
-        success: true,
-        output,
+        success: false,
+        error,
         trace,
       };
-    } catch (error) {
-      const fallbackStepId = stepToRun.fallbackTo;
+    }
   
-      // No fallback configured → intent fails
-      if (!fallbackStepId) {
-        emit({
-          type: "step_finished",
-          intentName: name,
-          stepId: stepToRun.id,
-          timestamp: now(),
-          success: false,
-          error,
-        });
+    // 3. Normal path: mark intent started once
+    emit({
+      type: "intent_started",
+      intentName: name,
+      timestamp: now(),
+    });
   
-        emit({
-          type: "intent_finished",
-          intentName: name,
-          timestamp: now(),
-          success: false,
-          error,
-        });
+    let currentStepId: StepId | undefined = entryStep.id;
+    let lastOutput: Output | undefined;
   
-        return {
-          intentName: name,
-          success: false,
-          error,
-          trace,
-        };
-      }
+    // Helper: run a step (with retry+timeout) and its optional fallback,
+    // and decide which step comes next.
+    const runStepWithFallback = async (
+      step: StepConfig<Input, Output>
+    ): Promise<{
+      success: boolean;
+      output?: Output;
+      nextStepId?: StepId;
+      error?: unknown;
+    }> => {
+      // Primary step started
+      emit({
+        type: "step_started",
+        intentName: name,
+        stepId: step.id,
+        timestamp: now(),
+      });
   
-      // Resolve fallback step
-      const fallbackStep = steps.find((s) => s.id === fallbackStepId);
-  
-      if (!fallbackStep) {
-        const fallbackError = new Error(
-          `fallbackTo "${fallbackStepId}" does not match any step id.`
+      try {
+        const output = await runWithRetry(
+          () =>
+            runWithTimeout(
+              () => step.run(ctx),
+              step.timeoutMs,
+              ctx.telemetry,
+              name,
+              step.id
+            ),
+          ctx.telemetry,
+          name,
+          step.id,
+          step.retry
         );
   
         emit({
           type: "step_finished",
           intentName: name,
-          stepId: stepToRun.id,
+          stepId: step.id,
           timestamp: now(),
-          success: false,
-          error: fallbackError,
+          success: true,
         });
   
+        // Linear chaining: go to the next step in the array
+        const idx = steps.findIndex((s) => s.id === step.id);
+        const next = steps[idx + 1];
+  
+        return {
+          success: true,
+          output: output as Output,
+          nextStepId: next?.id,
+        };
+      } catch (error) {
+        const fallbackStepId = step.fallbackTo;
+  
+        // No fallback configured → step fails here
+        if (!fallbackStepId) {
           emit({
+            type: "step_finished",
+            intentName: name,
+            stepId: step.id,
+            timestamp: now(),
+            success: false,
+            error,
+          });
+  
+          return {
+            success: false,
+            error,
+          };
+        }
+  
+        // Resolve fallback step
+        const fallbackStep = steps.find((s) => s.id === fallbackStepId);
+  
+        if (!fallbackStep) {
+          const fallbackError = new Error(
+            `fallbackTo "${fallbackStepId}" does not match any step id.`
+          );
+  
+          emit({
+            type: "step_finished",
+            intentName: name,
+            stepId: step.id,
+            timestamp: now(),
+            success: false,
+            error: fallbackError,
+          });
+  
+          return {
+            success: false,
+            error: fallbackError,
+          };
+        }
+  
+        // Telemetry: primary failed, now starting fallback step
+        emit({
+          type: "step_finished",
+          intentName: name,
+          stepId: step.id,
+          timestamp: now(),
+          success: false,
+          error,
+        });
+  
+        emit({
+          type: "step_started",
+          intentName: name,
+          stepId: fallbackStep.id,
+          timestamp: now(),
+        });
+  
+        try {
+          const fallbackOutput = await runWithRetry(
+            () =>
+              runWithTimeout(
+                () => fallbackStep.run(ctx),
+                fallbackStep.timeoutMs,
+                ctx.telemetry,
+                name,
+                fallbackStep.id
+              ),
+            ctx.telemetry,
+            name,
+            fallbackStep.id,
+            fallbackStep.retry
+          );
+  
+          emit({
+            type: "step_finished",
+            intentName: name,
+            stepId: fallbackStep.id,
+            timestamp: now(),
+            success: true,
+          });
+  
+          const idx = steps.findIndex((s) => s.id === fallbackStep.id);
+          const next = steps[idx + 1];
+  
+          return {
+            success: true,
+            output: fallbackOutput as Output,
+            nextStepId: next?.id,
+          };
+        } catch (fallbackError) {
+          emit({
+            type: "step_finished",
+            intentName: name,
+            stepId: fallbackStep.id,
+            timestamp: now(),
+            success: false,
+            error: fallbackError,
+          });
+  
+          return {
+            success: false,
+            error: fallbackError,
+          };
+        }
+      }
+    };
+  
+    // 4. Main linear loop: A → B → C (with fallback jumps)
+    while (currentStepId) {
+      const step = steps.find((s) => s.id === currentStepId);
+  
+      if (!step) {
+        const error = new Error(
+          `Intent "${name}" references unknown step "${currentStepId}".`
+        );
+  
+        emit({
           type: "intent_finished",
           intentName: name,
           timestamp: now(),
           success: false,
-          error: fallbackError,
+          error,
         });
   
         return {
           intentName: name,
           success: false,
-          error: fallbackError,
+          error,
           trace,
         };
       }
   
-      // Telemetry: primary failed, now starting fallback step
+      const { success, output, nextStepId, error } =
+        await runStepWithFallback(step);
+  
+      if (!success) {
         emit({
-        type: "step_finished",
-        intentName: name,
-        stepId: stepToRun.id,
-        timestamp: now(),
-        success: false,
-        error,
-      });
-  
-        emit({
-        type: "step_started",
-        intentName: name,
-        stepId: fallbackStep.id,
-        timestamp: now(),
-      });
-  
-      // Run fallback step with same retry + timeout pipeline
-      try {
-        const fallbackOutput = await runWithRetry(
-          () => runWithTimeout(
-            () => fallbackStep.run(ctx),
-            fallbackStep.timeoutMs
-          ),
-        ctx.telemetry,
-        name,
-        fallbackStep.id,
-        fallbackStep.retry
-      );
-  
-          emit({
-          type: "step_finished",
-          intentName: name,
-          stepId: fallbackStep.id,
-          timestamp: now(),
-          success: true,
-        });
-  
-          emit({
-          type: "intent_finished",
-          intentName: name,
-          timestamp: now(),
-          success: true,
-        });
-  
-        return {
-          intentName: name,
-          success: true,
-          output: fallbackOutput,
-          trace,
-        };
-      } catch (fallbackError) {
-          emit({
-          type: "step_finished",
-          intentName: name,
-          stepId: fallbackStep.id,
-          timestamp: now(),
-          success: false,
-          error: fallbackError,
-        });
-  
-          emit({
           type: "intent_finished",
           intentName: name,
           timestamp: now(),
           success: false,
-          error: fallbackError,
+          error,
         });
   
         return {
           intentName: name,
           success: false,
-          error: fallbackError,
+          error,
           trace,
         };
       }
+  
+      if (output !== undefined) {
+        lastOutput = output;
+      }
+  
+      currentStepId = nextStepId;
     }
+  
+    // 5. All steps completed successfully
+    emit({
+      type: "intent_finished",
+      intentName: name,
+      timestamp: now(),
+      success: true,
+    });
+  
+    return {
+      intentName: name,
+      success: true,
+      output: lastOutput,
+      trace,
+    };
   }
-  
-
-  
-    
   

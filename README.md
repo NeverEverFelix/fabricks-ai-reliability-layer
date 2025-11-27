@@ -38,8 +38,11 @@ The library guarantees it runs predictably.**
 
 Install the package:
 
-```bash
 npm install ai-reliability-layer
+
+Example Usage
+```bash
+
 
 import { defineIntent, runIntent } from "ai-reliability-layer";
 

@@ -19,7 +19,26 @@
  * It is safe to delete as long as package.json is correctly configured.
  */
 
+
+
 // module.exports = require("./dist/index.js");
 
 export { defineIntent } from "./core/intent";
 export { runIntent } from "./core/engine";
+
+export type{
+    Intent,
+    IntentConfig,
+    StepConfig,
+    ExecutionContext,
+    TelemetryEvent,
+    ExecutionResult
+} from "./types";
+
+export type { RetryPolicy } from "./core/policies";
+
+export type {
+    TelemetrySink,
+  } from "./core/telemetry";
+
+  export { TimeOutError, RetryExhaustedError } from "./core/policies";

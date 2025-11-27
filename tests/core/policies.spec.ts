@@ -125,7 +125,7 @@
  */
 import { describe, it, expect } from "vitest";
 // Match the same style/path you use in engine.spec.ts
-import { runWithRetry, runWithTimeout } from "../../src/core/policies";
+import { runWithRetry, runWithTimeout , TimeOutError, RetryExhaustedError} from "../../src/core/policies";
 
 describe("runWithRetry", () => {
   it("executes the function once and returns its result when no policy is provided", async () => {
@@ -178,4 +178,46 @@ describe("runWithTimeout", () => {
       runWithTimeout(slow, 10), // 10ms timeout, slower promise
     ).rejects.toThrow();
   });
+});
+describe("runWithTimeout", () => {
+  // your existing tests:
+  // - resolves if the function finishes before the timeout
+  // - rejects if the function does not finish before the timeout
+
+  it("rejects with a TimeOutError when the function exceeds the timeout", async () => {
+    const slow = async () =>
+      new Promise<string>((resolve) => {
+        setTimeout(() => resolve("too late"), 50);
+      });
+
+    await expect(runWithTimeout(slow, 10)).rejects.toBeInstanceOf(TimeOutError);
+  });
+
+  it("propagates the original error when the function fails before the timeout", async () => {
+    const failing = async () => {
+      throw new Error("boom");
+    };
+
+    await expect(runWithTimeout(failing, 1000)).rejects.toThrow("boom");
+  });
+});
+it("throws RetryExhaustedError when all retry attempts fail", async () => {
+  let callCount = 0;
+
+  const alwaysFail = async () => {
+    callCount += 1;
+    throw new Error("boom");
+  };
+
+  await expect(
+    runWithRetry(
+      alwaysFail,
+      undefined,         // telemetry
+      "retry-intent",    // intentName
+      "step-1",          // stepId
+      { maxAttemps: 3 }, // policy
+    ),
+  ).rejects.toBeInstanceOf(RetryExhaustedError);
+
+  expect(callCount).toBe(3);
 });

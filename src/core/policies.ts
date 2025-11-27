@@ -119,6 +119,19 @@ export interface RetryPolicy {
 
 import { TelemetrySink, TelemetryEvent, StepId } from "../types";
 
+export class TimeOutError extends Error {
+  constructor(message = "Operation Timed out"){
+  super(message);
+  this.name = "TimeOutError";
+  }
+}
+export class RetryExhaustedError extends Error {
+  constructor(message = "No More Retry Attempts Left"){
+  super(message);
+  this.name = "RetryExhaustError";
+  }
+}
+
 export async function runWithRetry<T>(
   fn: () => Promise<T>,
   telemetry?: TelemetrySink,
@@ -126,13 +139,16 @@ export async function runWithRetry<T>(
   stepId?: string,
   policy?: RetryPolicy,
 ): Promise<T> {
+  
+  
   const maxAttempts =
     policy && policy.maxAttemps > 0 ? policy.maxAttemps : 1;
-
+  
   let lastError: unknown;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     // Emit telemetry for retry attempt start
+    
     telemetry?.({
       type: "retry_attempt_started",
       intentName: intentName ?? "(unknown-intent)",
@@ -148,6 +164,17 @@ export async function runWithRetry<T>(
       lastError = error;
 
       if (attempt === maxAttempts) {
+        // If we actually had a *real* retry (maxAttempts > 1), wrap in RetryExhaustedError
+        if (maxAttempts > 1) {
+          const message =
+            intentName && stepId
+              ? `Step "${stepId}" in intent "${intentName}" failed retry after ${maxAttempts} attempts`
+              : `Operation failed after ${maxAttempts} attempts`;
+
+          throw new RetryExhaustedError(message);
+        }
+
+        // No policy / only 1 attempt → propagate original error
         throw lastError;
       }
       telemetry?.({
@@ -177,7 +204,10 @@ export async function runWithTimeout<T>(
   }
 
   const now = () => Date.now();
-  const safeIntentName = intentName ?? "(unknown-intent)";
+  const message = intentName && stepId ? `Step "${stepId}" in intent "${intentName}" timed out after ${timeoutMs}ms`
+    : `Operation timed out after ${timeoutMs}ms`;
+  const error = new TimeOutError(message);
+    const safeIntentName = intentName ?? "(unknown-intent)";
 
   // timeout_started
   telemetry?.({
@@ -197,7 +227,7 @@ export async function runWithTimeout<T>(
         timestamp: now(),
       });
 
-      reject(new Error(`Operation failed with timeout ${timeoutMs}ms`));
+      reject(error);
     }, timeoutMs);
 
     fn()

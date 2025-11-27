@@ -153,72 +153,303 @@ import type { TelemetryEvent } from "../../src/types";
 import type { TelemetrySink } from "../../src/types";
 
 
-describe("runIntent – retry behavior", () => {
-  it("retries a failing step and eventually succeeds", async () => {
-    const events: TelemetryEvent[] = [];
-    const telemetry: TelemetrySink = (e) => {
-      events.push(e);
-    };
+describe("runIntent – fallback behavior", () => {
+  it("uses the fallback step when the primary step fails", async () => {
+    const telemetryEvents: any[] = [];
 
-    let callCount = 0;
-
-    const intent = defineIntent({
-      name: "retry-intent",
+    // Primary step: always throws
+    const intent = defineIntent<{}, string>({
+      name: "fallback-intent",
       steps: [
         {
           id: "primary",
           async run() {
-            callCount += 1;
-            if (callCount === 1) {
-              // first attempt fails
-              throw new Error("boom");
-            }
-            // second attempt succeeds
-            return "ok-after-retry";
+            throw new Error("primary blew up");
           },
-          // ✅ IMPORTANT: correct property name and >1 attempts
-          retry: {
-            maxAttemps: 2,
+          // When primary fails, we should go to this fallback
+          fallbackTo: "fallback",
+        },
+        {
+          id: "fallback",
+          async run() {
+            return "fallback-output";
           },
         },
       ],
+      entryStepId: "primary",
     });
 
     const result = await runIntent(intent, {
       input: {},
-      telemetry,
+      telemetry: (event) => {
+        telemetryEvents.push(event);
+      },
     });
 
-    // 1) Engine should report success because retry eventually worked
+    // 1) Engine-level result should be success, with fallback output
     expect(result.success).toBe(true);
-    expect(result.output).toBe("ok-after-retry");
-    expect(callCount).toBe(2); // 1 fail + 1 success
+    expect(result.output).toBe("fallback-output");
 
     // 2) Telemetry expectations
-    const types = events.map((e) => e.type);
-
-    const retryFailedEvents = events.filter(
-      (e): e is TelemetryEvent & { type: "retry_attempt_failed"; attempt: number } =>
-        e.type === "retry_attempt_failed"
+    const primaryFinished = telemetryEvents.find(
+      (e) => e.type === "step_finished" && e.stepId === "primary",
     );
-    const stepFailedEvents = events.filter(
-      (e): e is TelemetryEvent & { type: "step_finished"; success: false } =>
-        e.type === "step_finished" && e.success === false
+    expect(primaryFinished).toBeDefined();
+    expect(primaryFinished.success).toBe(false);
+
+    const fallbackStarted = telemetryEvents.find(
+      (e) => e.type === "step_started" && e.stepId === "fallback",
     );
-    
-    expect(retryFailedEvents.length).toBe(1);
-    expect(retryFailedEvents[0].attempt).toBe(1);
-    
+    expect(fallbackStarted).toBeDefined();
 
-    // Only the first attempt should have failed at the retry layer
-    expect(retryFailedEvents.length).toBe(1);
-    expect(retryFailedEvents[0].attempt).toBe(1);
+    const fallbackFinished = telemetryEvents.find(
+      (e) => e.type === "step_finished" && e.stepId === "fallback",
+    );
+    expect(fallbackFinished).toBeDefined();
+    expect(fallbackFinished.success).toBe(true);
 
-    // Because the step eventually succeeded, there should be no final step_failed
-    expect(stepFailedEvents.length).toBe(0);
+    const intentFinished = telemetryEvents.find(
+      (e) => e.type === "intent_finished",
+    );
+    expect(intentFinished).toBeDefined();
+    expect(intentFinished.success).toBe(true);
+  });
+});
 
-    // And we should still have a final intent_finished
-    expect(types[0]).toBe("intent_started");
-    expect(types[types.length - 1]).toBe("intent_finished");
+
+
+// =====================================================
+// NEW TEST — RETRY BEHAVIOR
+// =====================================================
+
+describe("runIntent – retry behavior", () => {
+  it("retries a failing step and succeeds on a later attempt", async () => {
+    const telemetryEvents: any[] = [];
+    let callCount = 0;
+
+    const intent = defineIntent<{}, string>({
+      name: "retry-intent",
+      steps: [
+        {
+          id: "primary",
+          retry: { maxAttemps: 2 }, // adjust if your naming differs
+          async run() {
+            callCount++;
+            if (callCount === 1) {
+              throw new Error("first attempt boom");
+            }
+            return "ok-after-retry";
+          },
+        },
+      ],
+      entryStepId: "primary",
+    });
+
+    const result = await runIntent(intent, {
+      input: {},
+      telemetry: (event) => telemetryEvents.push(event),
+    });
+
+    // 1) Engine-level expectations
+    expect(result.success).toBe(true);
+    expect(result.output).toBe("ok-after-retry");
+    expect(callCount).toBe(2);
+
+    // 2) Telemetry expectations
+    const retryStarted = telemetryEvents.filter(
+      (e) => e.type === "retry_attempt_started",
+    );
+    const retryFailed = telemetryEvents.filter(
+      (e) => e.type === "retry_attempt_failed",
+    );
+
+    // Attempt 1 + Attempt 2
+    expect(retryStarted.length).toBe(2);
+
+    // Only the first attempt should fail
+    expect(retryFailed.length).toBe(1);
+
+    // Final intent should be reported as success
+    const intentFinished = telemetryEvents.find(
+      (e) => e.type === "intent_finished",
+    );
+    expect(intentFinished).toBeDefined();
+    expect(intentFinished.success).toBe(true);
+  });
+});
+
+
+
+// =====================================================
+// NEW TEST — TIMEOUT BEHAVIOR
+// =====================================================
+
+describe("runIntent – timeout behavior", () => {
+  it("fails when a step exceeds timeoutMs and surfaces the timeout as a failed step + intent", async () => {
+    const telemetryEvents: any[] = [];
+
+    const intent = defineIntent<{}, string>({
+      name: "timeout-intent",
+      steps: [
+        {
+          id: "slow-step",
+          timeoutMs: 10, // tiny timeout
+          async run() {
+            // Simulate a slow operation
+            await new Promise((resolve) => setTimeout(resolve, 50));
+            return "too-late";
+          },
+        },
+      ],
+      entryStepId: "slow-step",
+    });
+
+    const result = await runIntent(intent, {
+      input: {},
+      telemetry: (event) => telemetryEvents.push(event),
+    });
+
+    // 1) Engine should fail due to timeout
+    expect(result.success).toBe(false);
+
+    // 2) Final intent_finished should also show failure + error
+    const intentFinished = telemetryEvents.find(
+      (e) => e.type === "intent_finished",
+    );
+    expect(intentFinished).toBeDefined();
+    expect(intentFinished.success).toBe(false);
+    expect(intentFinished.error).toBeDefined();
+
+    // 3) The step_finished event for slow-step should be marked as failed with an error
+    const slowStepFinished = telemetryEvents.find(
+      (e) => e.type === "step_finished" && e.stepId === "slow-step",
+    );
+    expect(slowStepFinished).toBeDefined();
+    expect(slowStepFinished.success).toBe(false);
+    expect(slowStepFinished.error).toBeDefined();
+
+    // (Optional) if your TimeoutError has a recognizable message, you can assert on it:
+    // expect(String(slowStepFinished.error.message || slowStepFinished.error))
+    //   .toContain("timeout");
+  });
+});
+
+
+// NEW TEST — MULTI-STEP LINEAR EXECUTION
+// =====================================================
+
+describe("runIntent – multi-step linear execution", () => {
+  it("runs multiple steps in order and returns the last step's output", async () => {
+    const telemetryEvents: any[] = [];
+    const executionOrder: string[] = [];
+
+    const intent = defineIntent<{}, string>({
+      name: "two-step-intent",
+      steps: [
+        {
+          id: "step-1",
+          async run(ctx) {
+            executionOrder.push("step-1");
+            // can optionally stash something in metadata
+            ctx.metadata = { ...(ctx.metadata || {}), fromStep1: "hello" };
+            return "first";
+          },
+        },
+        {
+          id: "step-2",
+          async run(ctx) {
+            executionOrder.push("step-2");
+            // see the metadata from step 1 is still there
+            expect(ctx.metadata?.fromStep1).toBe("hello");
+            return "second";
+          },
+        },
+      ],
+      entryStepId: "step-1",
+    });
+
+    const result = await runIntent(intent, {
+      input: {},
+      telemetry: (event) => telemetryEvents.push(event),
+    });
+
+    // 1) Engine should have run step-1 then step-2
+    expect(executionOrder).toEqual(["step-1", "step-2"]);
+
+    // 2) Final output should be from the last step
+    expect(result.success).toBe(true);
+    expect(result.output).toBe("second");
+
+    // 3) Telemetry should show both steps in order
+    const startedSteps = telemetryEvents
+      .filter((e) => e.type === "step_started")
+      .map((e) => e.stepId);
+    const finishedSteps = telemetryEvents
+      .filter((e) => e.type === "step_finished")
+      .map((e) => e.stepId);
+
+    expect(startedSteps).toEqual(["step-1", "step-2"]);
+    expect(finishedSteps).toEqual(["step-1", "step-2"]);
+  });
+});
+// =====================================================
+// INTEGRATION-STYLE: PROVIDER USAGE
+// =====================================================
+
+describe("runIntent – integration with providers", () => {
+  it("can call a provider from a step and return its result", async () => {
+    const telemetryEvents: any[] = [];
+
+    // Fake provider to stand in for OpenAI
+    const fakeLLM = {
+      async complete(prompt: string): Promise<string> {
+        return `LLM: ${prompt.toUpperCase()}`;
+      },
+    };
+
+    const intent = defineIntent<{ question: string }, string>({
+      name: "llm-intent",
+      steps: [
+        {
+          id: "prepare-prompt",
+          async run(ctx) {
+            const q = ctx.input.question;
+            ctx.metadata = {
+              ...(ctx.metadata || {}),
+              prompt: `Answer this question clearly: ${q}`,
+            };
+            return "prepared";
+          },
+        },
+        {
+          id: "call-llm",
+          async run(ctx) {
+            const prompt = ctx.metadata?.prompt as string;
+            const llm = ctx.providers?.llm as typeof fakeLLM;
+            const answer = await llm.complete(prompt);
+            return answer;
+          },
+        },
+      ],
+      entryStepId: "prepare-prompt",
+    });
+
+    const result = await runIntent(intent, {
+      input: { question: "what is reliability?" },
+      providers: { llm: fakeLLM },
+      telemetry: (event) => telemetryEvents.push(event),
+    });
+
+    // Engine result
+    expect(result.success).toBe(true);
+    expect(result.output).toBe(
+      'LLM: ANSWER THIS QUESTION CLEARLY: WHAT IS RELIABILITY?',
+    );
+
+    // Ensure both steps actually ran
+    const startedSteps = telemetryEvents
+      .filter((e) => e.type === "step_started")
+      .map((e) => e.stepId);
+    expect(startedSteps).toEqual(["prepare-prompt", "call-llm"]);
   });
 });
