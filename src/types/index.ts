@@ -101,6 +101,7 @@
 
 import { RetryPolicy } from "../core/policies";
 import { TelemetrySink } from "../core/telemetry";
+import { OpenAIProviderClient } from "../providers/openai";
 export type StepId = string;
 
 export interface StepConfig<Input = unknown, Output = unknown> {
@@ -123,7 +124,9 @@ export interface Intent<Input = unknown, Output = unknown>
 
 export interface ExecutionContext<Input = unknown> {
   input: Input;
-  providers?: Record<string, unknown>;
+  providers?: {
+    openai?:OpenAIProviderClient;
+  } 
   metadata?: Record<string, unknown>;
   telemetry?: TelemetrySink;
 }

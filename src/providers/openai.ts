@@ -118,3 +118,28 @@
  * It's the plug that lets your reliability engine call *any* LLM,
  * while keeping your architecture clean, scalable, and professional.
  */
+
+export interface OpenAIProviderClient{
+   chat: (params:ChatParameters)=> Promise<{content:string}>
+}
+export interface ChatParameters{
+    prompt:string;
+    model?:string;
+}
+export interface OpenAi {
+    apikey:string,
+    baseUrl?:string,
+    defaultModel?:string,
+}
+export function createOpenAIProvider(
+    config: OpenAi,
+):OpenAIProviderClient {
+    const {
+        apikey
+        baseUrl = "https://api.openai.com/v1",
+        defaultModel = "gpt-4.1-mini",
+    } = config;
+
+    
+}
+  
