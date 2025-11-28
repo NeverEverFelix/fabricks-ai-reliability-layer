@@ -19,6 +19,8 @@
  * It is safe to delete as long as package.json is correctly configured.
  */
 
+import { createOpenAIProvider } from "./providers/openai";
+
 
 
 // module.exports = require("./dist/index.js");
@@ -32,7 +34,7 @@ export type{
     StepConfig,
     ExecutionContext,
     TelemetryEvent,
-    ExecutionResult
+    ExecutionResult,
 } from "./types";
 
 export type { RetryPolicy } from "./core/policies";
@@ -42,3 +44,5 @@ export type {
   } from "./core/telemetry";
 
   export { TimeOutError, RetryExhaustedError } from "./core/policies";
+
+export {createOpenAIProvider} from "./providers/openai";

@@ -101,7 +101,6 @@
 
 import { RetryPolicy } from "../core/policies";
 import { TelemetrySink } from "../core/telemetry";
-import { OpenAIProviderClient } from "../providers/openai";
 export type StepId = string;
 
 export interface StepConfig<Input = unknown, Output = unknown> {
@@ -161,3 +160,15 @@ export interface ExecutionResult<Output = unknown> {
 
 export { TelemetrySink };
 //what runIntent returns
+export interface OpenAIProviderClient{
+  chat: (params:ChatParameters)=> Promise<{content:string}>
+}
+export interface ChatParameters{
+   prompt:string;
+   model?:string;
+}
+export interface OpenAiProviderConfig {
+   apiKey:string,
+   baseUrl?:string,
+   defaultModel?:string,
+}
