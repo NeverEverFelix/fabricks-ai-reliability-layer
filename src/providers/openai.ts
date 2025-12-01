@@ -147,7 +147,10 @@ export function createOpenAIProvider(
         });
 
         const data = await response.json();
-
+        console.log(
+            "[OpenAI raw response]",
+            JSON.stringify(data, null, 2),
+          );
         const content = data.output_text ??
         data.output?.[0]?.content?.[0]?.text ??
         "[empty response]";

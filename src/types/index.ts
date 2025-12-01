@@ -159,7 +159,7 @@ export interface ExecutionResult<Output = unknown> {
 }
 
 export { TelemetrySink };
-//what runIntent returns
+
 export interface OpenAIProviderClient{
   chat: (params:ChatParameters)=> Promise<{content:string}>
 }
