@@ -12,3 +12,33 @@
 # Step 5: Run the Vitest/Jest test suite to ensure functional correctness.
 # Step 6: Build the TypeScript project using the build config (usually tsconfig.build.json).
 # Step 7 (optional): Upload build artifacts (dist/) for inspection or debugging in CI.
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build library
+        run: npm run build

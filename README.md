@@ -161,9 +161,6 @@ const intent = defineIntent<Input, Output>({
 });
 
 ```
-### `stepDefintion()`
-A **step** is the smallest unit of work in an intent.  
-Each step describes a *single meaningful action* in a workflow 
 
 ### `runIntent(intent, input, options?)`
 
