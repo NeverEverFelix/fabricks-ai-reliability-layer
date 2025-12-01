@@ -112,12 +112,11 @@
  * With it, your entire system becomes extensible, testable, and clean.
  */
 
-import { consoleTelemetrySink} from "./telemetry";
 export interface RetryPolicy {
     maxAttemps: number;
 }
 
-import { TelemetrySink, TelemetryEvent, StepId } from "../types";
+import { TelemetrySink} from "../types";
 
 export class TimeOutError extends Error {
   constructor(message = "Operation Timed out"){

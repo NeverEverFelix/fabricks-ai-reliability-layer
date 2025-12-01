@@ -110,9 +110,7 @@ import type {
     StepConfig,
     StepId,
   } from "../types";
-  import { RetryPolicy, runWithRetry, runWithTimeout } from "./policies";
-  import { TelemetrySink } from "./telemetry";
-
+  import {  runWithRetry, runWithTimeout } from "./policies";
   export async function runIntent<Input, Output>(
     intent: Intent<Input, Output>,
     ctx: ExecutionContext<Input>
