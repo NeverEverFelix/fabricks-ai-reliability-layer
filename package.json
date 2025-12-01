@@ -1,16 +1,38 @@
 {
-  "name": "ai-reliability-layer",
+  "name": "fabricks-ai-reliability-layer",
   "version": "0.1.0",
+  "keywords": [
+  "ai",
+  "llm",
+  "workflow",
+  "orchestration",
+  "reliability",
+  "retry",
+  "timeout",
+  "fallback",
+  "telemetry",
+  "observability",
+  "openai",
+  "provider",
+  "typescript",
+  "nodejs",
+  "intent",
+  "engine",
+  "automation",
+  "resilience",
+  "distributed-systems",
+  "fault-tolerance"
+  ],
   "description": "Intent-based reliability engine for LLM workflows.",
   "license": "MIT",
   "author": "Felix Moronge",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/<you>/ai-reliability-layer.git"
+    "url": "git+https://github.com/NeverEverFelix/fabricks-ai-reliability-layer.git"
   },
-  "homepage": "https://github.com/<you>/ai-reliability-layer#readme",
+  "homepage": "https://github.com/NeverEverFelix/fabricks-ai-reliability-layer#readme",
   "bugs": {
-    "url": "https://github.com/<you>/ai-reliability-layer/issues"
+    "url": "https://github.com/NeverEverFelix/fabricks-ai-reliability-layer/issues"
   },
   "main": "dist/index.cjs",
   "module": "dist/index.mjs",

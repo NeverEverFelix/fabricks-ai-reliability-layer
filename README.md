@@ -1,4 +1,11 @@
 # fabricks-ai-reliability-layer
+[![npm version](https://img.shields.io/npm/v/fabricks-ai-reliability-layer?color=blue)](https://www.npmjs.com/package/fabricks-ai-reliability-layer)
+![TypeScript](https://img.shields.io/badge/types-TypeScript-blue)
+[![CI](https://github.com/NeverEverFelix/fabricks-ai-reliability-layer/actions/workflows/ci.yml/badge.svg)](https://github.com/NeverEverFelix/fabricks-ai-reliability-layer/actions)
+![Status](https://img.shields.io/badge/status-MVP%20v1.0-brightgreen)
+[![MIT License](https://img.shields.io/badge/license-MIT-yellow)](./LICENSE)
+![Built with GitHub Actions](https://img.shields.io/badge/Built%20with-GitHub%20Actions-2088FF?logo=github-actions&logoColor=white)
+[![Built with GitHub Actions](https://img.shields.io/badge/Built%20with-GitHub%20Actions-2088FF?logo=github-actions&logoColor=white)](https://github.com/NeverEverFelix/fabricks-ai-reliability-layer/actions)
 
 Reliable, intent-driven execution for LLM workflows — with built-in retries, timeouts, fallbacks, and structured telemetry.
 
