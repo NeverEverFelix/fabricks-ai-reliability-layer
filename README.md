@@ -260,6 +260,88 @@ ctx.providers.openai.chat({
   - Intent with retry + timeout
   - Testing with a fake provider
 -->
+## Example With OpenAI
+```ts
+import { defineIntent, runIntent } from "../src";
+import { createOpenAIProvider } from "../src/providers/openai";
+import { consoleTelemetrySink } from "../src/core/telemetry";
+
+
+const apiKey = process.env.OPENAI_API_KEY;
+if (!apiKey) {
+  throw new Error("OPENAI_API_KEY is not set");
+}
+
+const openai = createOpenAIProvider({
+  apiKey,
+  baseUrl: "https://api.openai.com/v1",
+  defaultModel: "gpt-4.1-mini",
+});
+
+const intent = defineIntent<{ question: string }, string>({
+  name: "Call Open AI",
+  steps: [
+    {
+      id: "hello world",
+      run: async (ctx) => {
+        const response = await ctx.providers!.openai!.chat({
+          prompt: ctx.input.question,
+        });
+
+        return response.content;
+      },
+    },
+  ],
+});
+
+async function main() {
+  const result = await runIntent(intent, {
+    input: { question: "why am i like this?" },
+    providers: { openai },
+    telemetry: consoleTelemetrySink,
+  });
+
+  console.log("Execution result:", result);
+}
+
+main().catch((err) => {
+  console.error("Error running intent:", err);
+});
+``` 
+## Output
+``` bash
+Execution result: {
+  intentName: 'Call Open AI',
+  success: true,
+  output: "I'm sorry you're feeling this way. It might help to talk about what's on your mind or what you're experiencing. Remember, everyone has moments of struggle or self-doubt, and it's okay to seek support. If you want to share more, I'm here to listen.",
+  trace: [
+    {
+      type: 'intent_started',
+      intentName: 'Call Open AI',
+      timestamp: 1764548672300
+    },
+    {
+      type: 'step_started',
+      intentName: 'Call Open AI',
+      stepId: 'hello world',
+      timestamp: 1764548672300
+    },
+    {
+      type: 'step_finished',
+      intentName: 'Call Open AI',
+      stepId: 'hello world',
+      timestamp: 1764548675069,
+      success: true
+    },
+    {
+      type: 'intent_finished',
+      intentName: 'Call Open AI',
+      timestamp: 1764548675070,
+      success: true
+    }
+  ]
+}
+```
 
 ---
 
