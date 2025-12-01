@@ -1,52 +1,39 @@
 # fabricks-ai-reliability-layer
- Intent-based reliability primitives for LLM workflows — retries, timeouts, fallbacks, and telemetry in a tiny TypeScript library.
 
- ## Why and what this package solves
-
-Modern LLMs are powerful but unpredictable: they time out, rate-limit, drift in quality, and occasionally fail without warning.  
-Most developers end up hand-rolling ad-hoc retries, timeouts, and fallbacks scattered across their codebase — fragile, inconsistent, and hard to debug.
-
-**AI Reliability Layer** provides a clean, intent-based way to describe *what you want the model to do*, while the library handles *how to do it reliably*.
-
-It solves three core problems:
-
-1. **Flaky LLM calls**  
-   Built-in retry, timeout, and fallback policies turn unreliable model calls into stable execution paths.
-
-2. **Scattered error handling**  
-   Reliability logic is centralized, deterministic, and observable — no more copy-pasted try/catch blocks.
-
-3. **Lack of visibility**  
-   Every step emits structured telemetry, so you can trace exactly what happened, why, and how long it took.
+Reliable, intent-driven execution for LLM workflows — with built-in retries, timeouts, fallbacks, and structured telemetry.
 
 In short:  
 **You focus on your workflow’s intent.  
 The library guarantees it runs predictably.**
 
-## Features at a glance
+---
+
+## Features
 
 - **Intent-based workflow definition** — describe what your workflow should do, not how to orchestrate it.
-- **Retries, timeouts, and fallbacks built in** — turn flaky LLM calls into dependable execution paths.
-- **Deterministic execution engine** — every run produces a clear, ordered trace of what happened.
-- **Structured telemetry events** — observe step starts, successes, failures, retries, and fallbacks in real time.
-- **Lightweight OpenAI provider** — a tiny adapter for making reliable model calls without heavy SDKs.
-- **Minimal API surface** — define an intent, run it, inspect the result; no infrastructure required.
-- **Test-friendly by design** — inject fake providers or override execution behavior for unit tests.
-- **Small, focused, and fast** — under-the-hood complexity stays invisible so you can ship reliable workflows quickly.
+- **Retries, timeouts, and fallbacks built in** — stabilize flaky LLM calls.
+- **Deterministic execution engine** — every run produces a clear, ordered trace.
+- **Structured telemetry events** — observe step starts, finishes, retries, and fallbacks.
+- **Lightweight OpenAI provider** — tiny adapter for reliable model calls without heavy SDKs.
+- **Minimal API surface** — define an intent, run it, inspect the result.
+- **Easy to test** — inject fake providers or override execution behavior.
+- **Fast and focused** — no bloat; reliability primitives only.
 
-## Quick start
+---
 
-Install the package:
+## Installation
+
 ```bash
 npm install fabricks-ai-reliability-layer
 ```
-Minimal Example Usage
-```bash
 
+---
 
+## Quick Start
+
+```ts
 import { defineIntent, runIntent } from "fabricks-ai-reliability-layer";
 
-// A simple intent with one step
 const greetIntent = defineIntent<{ name: string }, string>({
   name: "greet",
   steps: [
@@ -60,122 +47,80 @@ const greetIntent = defineIntent<{ name: string }, string>({
   entryStepId: "sayHello",
 });
 
-const result = await runIntent(greetIntent, {
-  input: { name: "Felix" },
-  telemetry: console.log,
-});
+async function main() {
+  const result = await runIntent(greetIntent, {
+    input: { name: "Felix" },
+    telemetry: console.log,
+  });
 
-console.log(result.output); // "Hello, Felix!"
+  console.log(result.output); // "Hello, Felix!"
+}
 
+main().catch(console.error);
 ```
-## Realistic Example
+
+---
+
+## Example: Reliable OpenAI Question Answering
+
 ```ts
+import { defineIntent, runIntent } from "fabricks-ai-reliability-layer";
+
 const answerIntent = defineIntent<{ question: string }, string>({
   name: "answer-intent",
   steps: [
     {
       id: "ask-primary",
-      retry: { maxAttemps: 2 },
+      retry: { maxAttempts: 2 },
       timeoutMs: 5000,
       fallbackTo: "ask-fallback",
       async run(ctx) {
-        return ctx.providers.openai.complete({
+        const response = await ctx.providers.openai.chat({
           model: "gpt-4.1-mini",
           messages: [
             { role: "system", content: "You are a concise assistant." },
             { role: "user", content: ctx.input.question },
           ],
         });
+
+        return response.content;
       },
     },
-
     {
       id: "ask-fallback",
       async run(ctx) {
-        return ctx.providers.openai.complete({
+        const response = await ctx.providers.openai.chat({
           model: "gpt-4o-mini",
           messages: [
             { role: "system", content: "Fallback model. Be brief." },
             { role: "user", content: ctx.input.question },
           ],
         });
+
+        return response.content;
       },
     },
   ],
   entryStepId: "ask-primary",
 });
 
-// Running it
-const result = await runIntent(answerIntent, {
-  input: { question: "Why Kaniko over DinD?" },
-  providers: {
-    openai: myReliableOpenAIProvider,
-  },
-});
+async function main() {
+  const result = await runIntent(answerIntent, {
+    input: { question: "Why Kaniko over DinD?" },
+    providers: {
+      openai: myReliableOpenAIProvider,
+    },
+  });
+
+  console.log(result.output);
+}
+
+main().catch(console.error);
 ```
-
-## Core concepts
-
-Fabricks AI Reliability Layer is intentionally small only exposing a tiny, predictable API surface. It’s built around a few core ideas that make LLM workflows predictable, observable, and easy to reason about.
-
----
-## Intents
-
-A named workflow composed of ordered steps.
-
----
-## Steps
-
-The smallest unit of execution.
 
 ---
 
-### `defineIntent(config)`
-
-Creates an intent definition that describes the steps, reliability policies, and fallbacks of a workflow.
-
-```ts
-const intent = defineIntent({
-  name: string,
-  steps: StepDefinition[],
-});
-```
-### `stepDefintion()`
-A **step** is the smallest unit of work in an intent.  
-Each step describes a *single meaningful action* in a workflow — for example:
-
-- “call the primary model”
-- “sanitize the output”
-- “fallback to a cheaper model”
-- “validate response structure”
-- “retry if rate-limited”
-
-Steps run in order unless a fallback path redirects execution.
-
-```ts
-type StepDefinition = {
-  id: string;
-  run: (ctx: ExecutionContext) => Promise<any>;
-
-  // Optional reliability policies
-  retry?: { maxAttempts: number };  // automatic retry behavior
-  timeoutMs?: number;               // maximum time the step is allowed to run
-  fallbackTo?: string;              // step to jump to if this one fails
-};
-```
-### `runIntent(intent, input, options?)`
-Executes an intent with the given input.
-
-Applies retry/timeout/fallback rules
-Produces a deterministic execution trace
-Emits telemetry events as steps run
-
-``` ts
-const result = await runIntent(intent, input, {
-  onEvent?: (event: TelemetryEvent) => void,
-});
-```
-## Architecture overview
+## Architecture Overview
 
 ```mermaid
 flowchart TD
@@ -188,7 +133,7 @@ flowchart TD
 
     C --> E
 
-    E --> F[Retry timeout fallback]
+    E --> F[Retry / timeout / fallback]
     F --> E
 
     E --> G[Telemetry sink]
@@ -196,250 +141,341 @@ flowchart TD
     E --> H[OpenAI provider]
     H --> I[OpenAI API]
 ```
-### **Intents**
-
-An **intent** describes *what you want your workflow to accomplish* — not the low-level mechanics of making the model behave.
-
-It consists of a named collection of ordered steps, each representing a meaningful action in your workflow (e.g., “call the primary model,” “sanitize output,” “fallback to a cheaper model”).
-
-You define intents with `defineIntent()`, and the library guarantees deterministic, reliability-aware execution.
 
 ---
+## API Reference
 
-### **Steps**
+### `defineIntent`
 
-A **step** is the smallest unit of work in an intent.
-
-Each step declares:
-
-- an `id`  
-- a `run(ctx)` function  
-- optional `retry` policy  
-- optional `timeoutMs`  
-- optional `fallbackTo` another step  
-
-Steps form a small DAG, where fallback paths create branching execution flows.
-
----
-
-### **Reliability policies**
-
-Every step can declare basic reliability rules:
-
-- **Retry** — how many attempts to make before giving up  
-- **Timeout** — how long the step is allowed to run  
-- **Fallback** — which step to jump to if the primary path fails  
-
-These policies turn flaky model calls into stable, predictable pathways.
-
----
-
-### **Execution context (`ctx`)**
-
-Each step receives a `ctx` object with:
-
-- **input** — the data passed to `runIntent()`  
-- **providers** — such as `ctx.providers.openai`  
-- **metada**
-
-## OpenAI provider
-
-AI Reliability Layer includes a minimal OpenAI-style provider that exposes a single method:
+Creates a named workflow composed of ordered steps with optional reliability policies.
 
 ```ts
-ctx.providers.openai.chat({
-  model: string;
-  messages: { role: string; content: string }[];
-}) 
+import { defineIntent } from "fabricks-ai-reliability-layer";
+
+const intent = defineIntent<Input, Output>({
+  name: "my-intent",
+  steps: [
+    // StepDefinition<Input, Output>
+  ],
+  entryStepId: "primary-step", // optional, defaults to first step
+});
+
 ```
+### `stepDefintion()`
+A **step** is the smallest unit of work in an intent.  
+Each step describes a *single meaningful action* in a workflow 
 
-## Examples
+### `runIntent(intent, input, options?)`
 
-<!-- Links or snippets for:
-  - Basic intent with fallback
-  - Intent with retry + timeout
-  - Testing with a fake provider
--->
-## Example With OpenAI
+Executes an intent with the given input.
+
+Applies retry/timeout/fallback rules
+Produces a deterministic execution trace
+Emits telemetry events as steps run
+
+``` ts
+const result = await runIntent(intent, input, {
+  onEvent?: (event: TelemetryEvent) => void,
+});
+```
+---
+## Core Types
+
+### `StepDefinition`
+
+Represents a single unit of work in an intent.
+
 ```ts
-import { defineIntent, runIntent } from "../src";
-import { createOpenAIProvider } from "../src/providers/openai";
-import { consoleTelemetrySink } from "../src/core/telemetry";
+interface StepDefinition<Input = unknown, Output = unknown> {
+  id: string;
+  run: (ctx: ExecutionContext<Input>) => Promise<Output>;
 
+  // Optional reliability policies (per-step)
+  retry?: {
+    maxAttempts: number; // total attempts, including the first
+  };
 
-const apiKey = process.env.OPENAI_API_KEY;
-if (!apiKey) {
-  throw new Error("OPENAI_API_KEY is not set");
+  timeoutMs?: number;     // maximum allowed runtime for this step
+  fallbackTo?: string;    // ID of another step to jump to on failure
+}
+```
+### `ExecutionContext`
+
+Passed into every step’s `run` handler.
+
+```ts
+interface ExecutionContext<Input = unknown> {
+  input: Input;
+
+  providers?: {
+    openai?: OpenAIProvider;
+    // user-defined providers can be added here
+  };
+
+  telemetry?: TelemetrySink;
+
+  metadata?: Record<string, unknown>;
+}
+```
+### `ExecutionResult`
+
+Returned from `runIntent`.
+
+```ts
+interface ExecutionResult<Output = unknown> {
+  intentName: string;
+  success: boolean;
+  output?: Output;
+  error?: unknown;
+  trace: TelemetryEvent[];
+}
+```
+### `TelemetryEvent` and `TelemetrySink`
+
+Structured events emitted during execution.
+
+```ts
+type TelemetryEventType =
+  | "intent_started"
+  | "intent_finished"
+  | "step_started"
+  | "step_finished"
+  | "retry_attempt_started"
+  | "retry_attempt_failed";
+
+interface TelemetryEvent {
+  type: TelemetryEventType;
+  intentName: string;
+  timestamp: number;
+
+  stepId?: string;   // present for step-related events
+  success?: boolean; // for step_finished / intent_finished
+  attempt?: number;  // for retry events
+  error?: unknown;   // when an error occurred
 }
 
-const openai = createOpenAIProvider({
-  apiKey,
+type TelemetrySink = (event: TelemetryEvent) => void;
+```
+---
+## Provider Interface
+
+The engine only assumes that `ctx.providers.openai` implements a tiny, stable interface.
+
+### OpenAI Provider Contract
+
+```ts
+export interface OpenAIProviderClient {
+  chat(params: ChatParameters): Promise<{ content: string }>;
+}
+
+export interface ChatParameters {
+  prompt: string;
+  model?: string;
+}
+```
+### Built-in `createOpenAIProvider`
+
+This package includes a small helper to create a provider from an API key:
+
+```ts
+import {
+  createOpenAIProvider,
+  type OpenAIProviderClient,
+} from "fabricks-ai-reliability-layer";
+
+const openai: OpenAIProviderClient = createOpenAIProvider({
+  apiKey: process.env.OPENAI_API_KEY!,
+  baseUrl: "https://api.openai.com/v1",    // optional, defaults provided
+  defaultModel: "gpt-4.1-mini",            // optional, defaults provided
+});
+```
+### Configuration Shape
+
+```ts
+export interface OpenAiProviderConfig {
+  apiKey: string;
+  baseUrl?: string;
+  defaultModel?: string;
+}
+```
+### Injecting into `runIntent`
+
+```ts
+const result = await runIntent(answerIntent, {
+  input: { question: "Why Kaniko over DinD?" },
+  providers: { openai },
+});
+```
+
+---
+### Advanced Usage
+
+
+1. You can combine multiple OpenAI calls into a single reliable intent.  
+Below is an example that:
+
+1. **Classifies** the user’s question.
+2. **Drafts** an answer using that classification (with retry + timeout).
+
+```ts
+import { defineIntent, runIntent } from "fabricks-ai-reliability-layer";
+import {
+  createOpenAIProvider,
+  type OpenAIProviderClient,
+} from "fabricks-ai-reliability-layer";
+
+// Create a provider instance (once, at the edge or in your backend)
+const openai: OpenAIProviderClient = createOpenAIProvider({
+  apiKey: process.env.OPENAI_API_KEY!,
   baseUrl: "https://api.openai.com/v1",
   defaultModel: "gpt-4.1-mini",
 });
 
-const intent = defineIntent<{ question: string }, string>({
-  name: "Call Open AI",
+// Multi-step intent
+const multiStepQaIntent = defineIntent<{ question: string }, string>({
+  name: "multi-step-qa",
   steps: [
     {
-      id: "hello world",
-      run: async (ctx) => {
-        const response = await ctx.providers!.openai!.chat({
-          prompt: ctx.input.question,
+      id: "classify-question",
+      async run(ctx) {
+        const res = await ctx.providers!.openai!.chat({
+          model: "gpt-4.1-mini",
+          prompt: [
+            {
+              role: "system",
+              content:
+                "Classify the user's question as one of: 'how-to', 'definition', 'comparison', or 'other'. " +
+                "Reply with just the label.",
+            },
+            { role: "user", content: ctx.input.question },
+          ],
         });
 
-        return response.content;
+        // Store the classification in metadata for downstream steps
+        ctx.metadata = {
+          ...ctx.metadata,
+          questionType: res.content.trim(),
+        };
+
+        return res.content;
+      },
+    },
+
+    {
+      id: "draft-answer",
+      retry: { maxAttempts: 2 }, // automatic retry on failure
+      timeoutMs: 8000,           // fail fast if the model is too slow
+      async run(ctx) {
+        const questionType = ctx.metadata?.questionType ?? "other";
+
+        const res = await ctx.providers!.openai!.chat({
+          model: "gpt-4.1-mini",
+          messages: [
+            {
+              role: "system",
+              content: `You are a senior engineer. The question type is "${questionType}". ` +
+                       "Answer concisely in under 6 sentences.",
+            },
+            { role: "user", content: ctx.input.question },
+          ],
+        });
+
+        // This becomes the final output of the intent
+        return res.content;
       },
     },
   ],
+  entryStepId: "classify-question",
 });
 
+// Running the multi-step workflow
 async function main() {
-  const result = await runIntent(intent, {
-    input: { question: "why am i like this?" },
+  const result = await runIntent(multiStepQaIntent, {
+    input: { question: "Why would you choose Kaniko over Docker-in-Docker for CI builds?" },
     providers: { openai },
-    telemetry: consoleTelemetrySink,
+    telemetry: (event) => {
+      console.log("[qa telemetry]", event);
+    },
   });
 
-  console.log("Execution result:", result);
+  if (result.success) {
+    console.log("Final answer:", result.output);
+  } else {
+    console.error("Intent failed:", result.error);
+  }
 }
 
-main().catch((err) => {
-  console.error("Error running intent:", err);
-});
-``` 
-## Output
-``` bash
-Execution result: {
-  intentName: 'Call Open AI',
-  success: true,
-  output: "I'm sorry you're feeling this way. It might help to talk about what's on your mind or what you're experiencing. Remember, everyone has moments of struggle or self-doubt, and it's okay to seek support. If you want to share more, I'm here to listen.",
-  trace: [
-    {
-      type: 'intent_started',
-      intentName: 'Call Open AI',
-      timestamp: 1764548672300
-    },
-    {
-      type: 'step_started',
-      intentName: 'Call Open AI',
-      stepId: 'hello world',
-      timestamp: 1764548672300
-    },
-    {
-      type: 'step_finished',
-      intentName: 'Call Open AI',
-      stepId: 'hello world',
-      timestamp: 1764548675069,
-      success: true
-    },
-    {
-      type: 'intent_finished',
-      intentName: 'Call Open AI',
-      timestamp: 1764548675070,
-      success: true
-    }
-  ]
-}
+main().catch(console.error);
 ```
+---
+## Design Philosophy
+
+AI systems fail in ways traditional software doesn't: they time out, return inconsistent results, exceed rate limits, or degrade silently over time.
+
+This library provides a **reliability-first foundation** for building predictable AI workflows using simple, intent-based abstractions.
+
+It follows three principles:
+
+1. **Intent over mechanics** — you describe *what*, the engine decides *how*.
+2. **Small surface area, strong guarantees** — deterministic execution, graceful degradation, transparent observability.
+3. **Business resilience as a first-class goal** — stable AI behavior leads to stable products.
 
 ---
+## What’s Next for This Library
 
-## Design philosophy
+This release focuses on a small, reliable core: intents, steps, retries, timeouts, fallbacks, and telemetry.  
+Next iterations will grow the library **horizontally** (more integrations) and **vertically** (richer reliability features) without breaking the existing API.
 
-AI systems fail in ways traditional software doesn't: they time out, return inconsistent results, exceed rate limits, or degrade silently as models evolve.  
-The goal of this library is to give developers a **reliability-first foundation** for building predictable AI workflows using simple, intent-based abstractions.
+Planned areas of development:
 
-At its core, AI Reliability Layer follows three principles:
+### 1. Engine & Telemetry
 
-1. **Intent over mechanics**  
-   You describe *what* your workflow should accomplish.  
-   The engine decides *how* to execute it safely — with retries, timeouts, fallbacks, and clear telemetry.
+- **Richer telemetry fields**  
+  - Per-step durations and attempt counts  
+  - Clearer error metadata and failure reasons  
+- **Improved traces**  
+  - More explicit step result metadata in `trace`  
+  - Easier correlation with logs / request IDs  
 
-2. **Small surface area, strong guarantees**  
-   Instead of a heavy workflow platform, this library focuses on the primitives that matter most:  
-   deterministic execution, graceful degradation, and transparent observability.  
-   This keeps the package easy to learn, easy to test, and easy to trust.
+### 2. Workflow Capabilities
 
-3. **Business resilience as a first-class goal**  
-   Reliable AI behavior directly maps to business outcomes:  
-   fewer failed requests, lower latency variability, predictable costs, and safer user-facing experiences.  
-   As organizations integrate more LLMs into critical paths, these guarantees compound into real operational stability.
+- **Full DAG support**  
+  - `dependsOn` relationships between steps  
+  - Static cycle detection and validation  
+  - Fan-out / fan-in semantics on top of the current linear model  
+- **Parallel execution**  
+  - Run independent steps concurrently with concurrency limits  
+  - Clear guarantees around ordering and telemetry when parallelized  
 
-Looking ahead, reliability layers like this will become a **standard architectural building block** in AI applications — the same way queues, retries, and circuit breakers became foundational in distributed systems.  
-This library demonstrates that future, starting from a minimal, elegant core.
+### 3. Reliability Features
 
-## What’s intentionally not included (and why)
+- **Budgets and envelopes**  
+  - Latency budgets per intent / step  
+  - Soft cost ceilings (e.g. token or dollar budgets)  
+- **Circuit breakers & backoff**  
+  - Temporarily trip a provider or step when failure rates spike  
+  - Smarter retry strategies (exponential backoff, jitter)  
 
-To keep the v1 release focused, reliable, and easy to adopt, several powerful features were deliberately **excluded** from the MVP. These will be added in future versions, but only once the core intent engine is stable and well-tested.
+### 4. Providers & Integrations
 
-### ❌ YAML workflow definitions  
-**Why not in MVP:**  
-YAML introduces a full configuration surface area: schema validation, better error messages, type-safe loaders, ambiguous user expectations, and cross-platform parsing concerns.  
-This increases complexity without improving the core reliability story.
+- **Additional providers** behind the same contract  
+  - Generic HTTP provider for calling arbitrary REST APIs as steps  
+  - Additional LLM providers (e.g. Anthropic-style clients)  
+- **Better testing utilities**  
+  - Helper functions for building fake providers and deterministic tests  
 
-**How it will be added:**  
-Once the JS API is proven, YAML will layer cleanly on top as a declarative syntax that compiles into the same internal intent representation. This preserves reliability while adding ergonomic configuration for larger workflows.
+### 5. Tooling & Ecosystem
 
----
+- **CI & release automation**  
+  - Stable test matrix across Node LTS versions  
+  - Automated semantic versioning and changelog generation  
+- **Docs & examples**  
+  - More end-to-end examples (backend API, queue workers, cron jobs)  
+  - Guides for plugging into common logging / metrics stacks  
 
-### ❌ Full DAG execution (fan-out, fan-in, branching, cycle detection)  
-**Why not in MVP:**  
-A production DAG engine requires dependency resolution, topological sorting, cycle detection, and error propagation rules. That’s a separate reliability product on its own.  
-MVP workflows rarely need branching beyond a fallback path.
+The goal is to keep the **core mental model unchanged**—intents, steps, policies, telemetry—while steadily adding power and ergonomics around it.
 
-**How it will be added:**  
-The internal architecture already models steps as nodes; expanding to a full DAG is a natural evolution:  
-- `dependsOn` support  
-- static cycle detection  
-- parallelizable branches  
-- multi-path coordination  
-Future versions will upgrade the engine without changing the public API.
 
----
+## License
 
-### ❌ Parallel execution  
-**Why not in MVP:**  
-Parallel execution adds concurrency control, cancellation strategy, and race-condition observability — unnecessary for the smallest reliable intent engine.
-
-**How it will be added:**  
-A parallel scheduler will sit behind the same intent definition, using a worker pool or Promise-based concurrency limits.
-
----
-
-### ❌ Multi-provider orchestration (Anthropic, HTTP steps, chaining models)  
-**Why not in MVP:**  
-Adding multiple providers complicates context, error handling, cost modeling, and telemetry.  
-The goal of v1 is clarity, not breadth.
-
-**How it will be added:**  
-Providers will follow the same interface as `openai.chat()`, making swapping or extending trivial.
-
----
-
-### ❌ Circuit breakers, rate-limiters, cost envelopes  
-**Why not in MVP:**  
-These are advanced reliability features that deserve careful design — they must be correct, composable, and observable.  
-Including them too early would dilute the quality of the core engine.
-
-**How it will be added:**  
-Future versions will introduce optional envelopes (e.g., max cost, max latency, max error rate) and failure budgets that wrap the existing retry/fallback logic.
-
----
-
-### Why these exclusions matter  
-The **point** of the MVP is to ship a **tight, correct, professional-grade core**:  
-- deterministic execution  
-- retry/timeout/fallback  
-- telemetry  
-- one clean provider API  
-
-Everything else builds on this foundation.
-
-By intentionally keeping v1 small, the project avoids:  
-- shallow breadth  
-- inconsistent behavior  
-- half-finished features  
-- bloated surface area  
-
-This makes the library **trustworthy today and extensible tomorrow**.
+MIT

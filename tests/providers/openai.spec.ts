@@ -137,6 +137,8 @@
  * This file guarantees your reliability engine can trust the LLM interface.
  */
 import { describe, it, expect } from "vitest";
+import { defineIntent } from "../../src/core/intent";
+import { runIntent } from "../../src/core/engine";
 
 describe("OpenAI provider (placeholder)", () => {
   it("is a placeholder test that always passes", () => {

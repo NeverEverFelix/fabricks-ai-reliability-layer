@@ -151,7 +151,7 @@ import { defineIntent } from "../../src/core/intent";
 import { runIntent } from "../../src/core/engine";
 import type { TelemetryEvent } from "../../src/types";
 import type { TelemetrySink } from "../../src/types";
-
+import { createOpenAIProvider } from "../../src/providers/openai";
 
 describe("runIntent – fallback behavior", () => {
   it("uses the fallback step when the primary step fails", async () => {
@@ -400,11 +400,11 @@ describe("runIntent – integration with providers", () => {
   it("can call a provider from a step and return its result", async () => {
     const telemetryEvents: any[] = [];
 
-    // Fake provider to stand in for OpenAI
-    const fakeLLM = {
-      async complete(prompt: string): Promise<string> {
-        return `LLM: ${prompt.toUpperCase()}`;
-      },
+    // Fake provider (deterministic, no network)
+    const fakeProvider = {
+      chat: async ({ prompt }: { prompt: string }) => ({
+        content: `LLM: ${prompt.toUpperCase()}`,
+      }),
     };
 
     const intent = defineIntent<{ question: string }, string>({
@@ -424,32 +424,37 @@ describe("runIntent – integration with providers", () => {
         {
           id: "call-llm",
           async run(ctx) {
-            const prompt = ctx.metadata?.prompt as string;
-            const llm = ctx.providers?.llm as typeof fakeLLM;
-            const answer = await llm.complete(prompt);
-            return answer;
+            // Safely read the prepared prompt from metadata, fallback to raw question
+            const meta = ctx.metadata as { prompt?: string } | undefined;
+            const prompt = meta?.prompt ?? ctx.input.question;
+
+            const response = await ctx.providers!.openai!.chat({
+              prompt,
+            });
+
+            return response.content;
           },
         },
       ],
-      entryStepId: "prepare-prompt",
     });
 
     const result = await runIntent(intent, {
       input: { question: "what is reliability?" },
-      providers: { llm: fakeLLM },
+      providers: { openai: fakeProvider },
       telemetry: (event) => telemetryEvents.push(event),
     });
 
     // Engine result
     expect(result.success).toBe(true);
     expect(result.output).toBe(
-      'LLM: ANSWER THIS QUESTION CLEARLY: WHAT IS RELIABILITY?',
+      "LLM: ANSWER THIS QUESTION CLEARLY: WHAT IS RELIABILITY?"
     );
 
     // Ensure both steps actually ran
     const startedSteps = telemetryEvents
       .filter((e) => e.type === "step_started")
       .map((e) => e.stepId);
+
     expect(startedSteps).toEqual(["prepare-prompt", "call-llm"]);
   });
 });

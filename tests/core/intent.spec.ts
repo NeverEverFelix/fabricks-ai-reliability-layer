@@ -107,8 +107,7 @@
  * This is one of the most important test files in the entire project.
  */
 import { describe, it, expect } from "vitest";
-import { defineIntent } from "../../src/core/intent";// 👈 use the same path style as engine.spec.ts
-
+import { defineIntent } from "../../src/core/intent";
 // If your engine.spec.ts uses "../../src/core/intent" instead,
 // then change this import to match.
 
