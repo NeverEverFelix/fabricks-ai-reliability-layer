@@ -1,7 +1,7 @@
 import { defineIntent } from "../src";
 import { runIntent } from "../src";
 import { consoleTelemetrySink } from "../src/core/telemetry";
-import { OpenAIProviderClient } from "../src/types";
+
 
 const intent = defineIntent({
     name: "Test intet",
@@ -9,7 +9,7 @@ const intent = defineIntent({
         {
             id:"fist step",
             timeoutMs:500,
-            run: async(ctx)=> {
+            run: async()=> {
                 await new Promise((resolve) => setTimeout(resolve, 100));
                 return "OK"
             },

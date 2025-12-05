@@ -3,4 +3,3 @@
     "extends": "./tsconfig.json",
     "exclude": ["tests", "examples", ".github", "vitest.config.ts"]
   }
-  
