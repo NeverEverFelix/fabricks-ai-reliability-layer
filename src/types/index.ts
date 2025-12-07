@@ -175,6 +175,12 @@ export interface OpenAiProviderConfig {
 export interface DbProviderclient{
 
 }
+export interface dbProviderConfig{
+
+}
+export interface cacheProviderConfig{
+
+}
 export interface cacheProviderClient{
   
 }

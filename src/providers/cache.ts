@@ -1,2 +1,11 @@
-import {cacheProviderClient} from "../types";
-export function cacheProviderClient(){}
+import {cacheProviderClient, cacheProviderConfig} from "../types";
+
+
+export function createCacheProviderClient(
+    config: cacheProviderConfig,
+):cacheProviderClient{
+    const {
+
+    } = config;
+}
+    
