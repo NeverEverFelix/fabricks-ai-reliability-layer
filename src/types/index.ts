@@ -172,3 +172,9 @@ export interface OpenAiProviderConfig {
    baseUrl?:string,
    defaultModel?:string,
 }
+export interface DbProviderclient{
+
+}
+export interface cacheProviderClient{
+  
+}

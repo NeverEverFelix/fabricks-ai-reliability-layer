@@ -9,6 +9,8 @@
 
 Reliable, intent-driven execution for LLM workflows — with built-in retries, timeouts, fallbacks, and structured telemetry.
 
+The AI Reliability Layer acts like a service mesh for AI workflows: it centralizes retries, timeouts, fallbacks, provider routing, and telemetry for all LLM/API calls, removing this logic from application code and enforcing consistent reliability across every step of a workflow.
+
 In short:  
 **You focus on your workflow’s intent.  
 The library guarantees it runs predictably.**

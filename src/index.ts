@@ -45,4 +45,8 @@ export type {
 
   export { TimeOutError, RetryExhaustedError } from "./core/policies";
 
+
+
 export {createOpenAIProvider} from "./providers/openai";
+export {cacheProviderClient} from "./providers/cache"
+export {createDbProviderClient} from "./providers/database"
