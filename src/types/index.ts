@@ -125,10 +125,8 @@ export interface ExecutionContext<Input = unknown> {
   input: Input;
   providers?: {
     openai?:OpenAIProviderClient;
-    cache?:cacheProviderClient,
-    db?:DbProviderclient
   } 
-  metadata?: Record<string, unknown>;
+  metadata: Record<string, unknown>;
   telemetry?: TelemetrySink;
 }
 //what a step receives at runtime
@@ -158,6 +156,7 @@ export interface ExecutionResult<Output = unknown> {
   output?: Output;
   error?: unknown;
   trace: TelemetryEvent[];
+  metadata:Record<string, unknown>;
 }
 
 export { TelemetrySink };
@@ -173,16 +172,4 @@ export interface OpenAiProviderConfig {
    apiKey:string,
    baseUrl?:string,
    defaultModel?:string,
-}
-export interface DbProviderclient{
-
-}
-export interface dbProviderConfig{
-
-}
-export interface cacheProviderConfig{
-
-}
-export interface cacheProviderClient{
-  
 }

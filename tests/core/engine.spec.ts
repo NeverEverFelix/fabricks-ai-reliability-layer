@@ -150,15 +150,17 @@ import { describe, it, expect } from "vitest";
 import { defineIntent } from "../../src/core/intent";
 import { runIntent } from "../../src/core/engine";
 import type { TelemetryEvent } from "../../src/types";
-import type { TelemetrySink } from "../../src/types";
-import { createOpenAIProvider } from "../../src/providers/openai";
+
+// =====================================================
+// FALLBACK BEHAVIOR
+// =====================================================
 
 describe("runIntent – fallback behavior", () => {
   it("uses the fallback step when the primary step fails", async () => {
-    const telemetryEvents: any[] = [];
+    const telemetryEvents: TelemetryEvent[] = [];
 
     // Primary step: always throws
-    const intent = defineIntent<{}, string>({
+    const intent = defineIntent<void, string>({
       name: "fallback-intent",
       steps: [
         {
@@ -180,7 +182,8 @@ describe("runIntent – fallback behavior", () => {
     });
 
     const result = await runIntent(intent, {
-      input: {},
+      input: undefined,
+      metadata: {},
       telemetry: (event) => {
         telemetryEvents.push(event);
       },
@@ -195,7 +198,7 @@ describe("runIntent – fallback behavior", () => {
       (e) => e.type === "step_finished" && e.stepId === "primary",
     );
     expect(primaryFinished).toBeDefined();
-    expect(primaryFinished.success).toBe(false);
+    expect(primaryFinished!.success).toBe(false);
 
     const fallbackStarted = telemetryEvents.find(
       (e) => e.type === "step_started" && e.stepId === "fallback",
@@ -206,33 +209,32 @@ describe("runIntent – fallback behavior", () => {
       (e) => e.type === "step_finished" && e.stepId === "fallback",
     );
     expect(fallbackFinished).toBeDefined();
-    expect(fallbackFinished.success).toBe(true);
+    expect(fallbackFinished!.success).toBe(true);
 
     const intentFinished = telemetryEvents.find(
       (e) => e.type === "intent_finished",
     );
     expect(intentFinished).toBeDefined();
-    expect(intentFinished.success).toBe(true);
+    expect(intentFinished!.success).toBe(true);
   });
 });
 
 
-
 // =====================================================
-// NEW TEST — RETRY BEHAVIOR
+// RETRY BEHAVIOR
 // =====================================================
 
 describe("runIntent – retry behavior", () => {
   it("retries a failing step and succeeds on a later attempt", async () => {
-    const telemetryEvents: any[] = [];
+    const telemetryEvents: TelemetryEvent[] = [];
     let callCount = 0;
 
-    const intent = defineIntent<{}, string>({
+    const intent = defineIntent<void, string>({
       name: "retry-intent",
       steps: [
         {
           id: "primary",
-          retry: { maxAttemps: 2 }, // adjust if your naming differs
+          retry: { maxAttemps: 2 }, // keep in sync with your policies.ts
           async run() {
             callCount++;
             if (callCount === 1) {
@@ -246,7 +248,8 @@ describe("runIntent – retry behavior", () => {
     });
 
     const result = await runIntent(intent, {
-      input: {},
+      input: undefined,
+      metadata: {},
       telemetry: (event) => telemetryEvents.push(event),
     });
 
@@ -274,21 +277,20 @@ describe("runIntent – retry behavior", () => {
       (e) => e.type === "intent_finished",
     );
     expect(intentFinished).toBeDefined();
-    expect(intentFinished.success).toBe(true);
+    expect(intentFinished!.success).toBe(true);
   });
 });
 
 
-
 // =====================================================
-// NEW TEST — TIMEOUT BEHAVIOR
+// TIMEOUT BEHAVIOR
 // =====================================================
 
 describe("runIntent – timeout behavior", () => {
   it("fails when a step exceeds timeoutMs and surfaces the timeout as a failed step + intent", async () => {
-    const telemetryEvents: any[] = [];
+    const telemetryEvents: TelemetryEvent[] = [];
 
-    const intent = defineIntent<{}, string>({
+    const intent = defineIntent<void, string>({
       name: "timeout-intent",
       steps: [
         {
@@ -305,7 +307,8 @@ describe("runIntent – timeout behavior", () => {
     });
 
     const result = await runIntent(intent, {
-      input: {},
+      input: undefined,
+      metadata: {},
       telemetry: (event) => telemetryEvents.push(event),
     });
 
@@ -317,33 +320,34 @@ describe("runIntent – timeout behavior", () => {
       (e) => e.type === "intent_finished",
     );
     expect(intentFinished).toBeDefined();
-    expect(intentFinished.success).toBe(false);
-    expect(intentFinished.error).toBeDefined();
+    expect(intentFinished!.success).toBe(false);
+    expect(intentFinished!.error).toBeDefined();
 
     // 3) The step_finished event for slow-step should be marked as failed with an error
     const slowStepFinished = telemetryEvents.find(
       (e) => e.type === "step_finished" && e.stepId === "slow-step",
     );
     expect(slowStepFinished).toBeDefined();
-    expect(slowStepFinished.success).toBe(false);
-    expect(slowStepFinished.error).toBeDefined();
+    expect(slowStepFinished!.success).toBe(false);
+    expect(slowStepFinished!.error).toBeDefined();
 
     // (Optional) if your TimeoutError has a recognizable message, you can assert on it:
-    // expect(String(slowStepFinished.error.message || slowStepFinished.error))
+    // expect(String((slowStepFinished!.error as Error).message || slowStepFinished!.error))
     //   .toContain("timeout");
   });
 });
 
 
-// NEW TEST — MULTI-STEP LINEAR EXECUTION
+// =====================================================
+// MULTI-STEP LINEAR EXECUTION
 // =====================================================
 
 describe("runIntent – multi-step linear execution", () => {
   it("runs multiple steps in order and returns the last step's output", async () => {
-    const telemetryEvents: any[] = [];
+    const telemetryEvents: TelemetryEvent[] = [];
     const executionOrder: string[] = [];
 
-    const intent = defineIntent<{}, string>({
+    const intent = defineIntent<void, string>({
       name: "two-step-intent",
       steps: [
         {
@@ -351,7 +355,7 @@ describe("runIntent – multi-step linear execution", () => {
           async run(ctx) {
             executionOrder.push("step-1");
             // can optionally stash something in metadata
-            ctx.metadata = { ...(ctx.metadata || {}), fromStep1: "hello" };
+            ctx.metadata = { ...ctx.metadata, fromStep1: "hello" };
             return "first";
           },
         },
@@ -360,7 +364,8 @@ describe("runIntent – multi-step linear execution", () => {
           async run(ctx) {
             executionOrder.push("step-2");
             // see the metadata from step 1 is still there
-            expect(ctx.metadata?.fromStep1).toBe("hello");
+            const meta = ctx.metadata as { fromStep1?: string };
+            expect(meta.fromStep1).toBe("hello");
             return "second";
           },
         },
@@ -369,7 +374,8 @@ describe("runIntent – multi-step linear execution", () => {
     });
 
     const result = await runIntent(intent, {
-      input: {},
+      input: undefined,
+      metadata: {},
       telemetry: (event) => telemetryEvents.push(event),
     });
 
@@ -392,13 +398,15 @@ describe("runIntent – multi-step linear execution", () => {
     expect(finishedSteps).toEqual(["step-1", "step-2"]);
   });
 });
+
+
 // =====================================================
 // INTEGRATION-STYLE: PROVIDER USAGE
 // =====================================================
 
 describe("runIntent – integration with providers", () => {
   it("can call a provider from a step and return its result", async () => {
-    const telemetryEvents: any[] = [];
+    const telemetryEvents: TelemetryEvent[] = [];
 
     // Fake provider (deterministic, no network)
     const fakeProvider = {
@@ -415,7 +423,7 @@ describe("runIntent – integration with providers", () => {
           async run(ctx) {
             const q = ctx.input.question;
             ctx.metadata = {
-              ...(ctx.metadata || {}),
+              ...ctx.metadata,
               prompt: `Answer this question clearly: ${q}`,
             };
             return "prepared";
@@ -425,8 +433,8 @@ describe("runIntent – integration with providers", () => {
           id: "call-llm",
           async run(ctx) {
             // Safely read the prepared prompt from metadata, fallback to raw question
-            const meta = ctx.metadata as { prompt?: string } | undefined;
-            const prompt = meta?.prompt ?? ctx.input.question;
+            const meta = ctx.metadata as { prompt?: string };
+            const prompt = meta.prompt ?? ctx.input.question;
 
             const response = await ctx.providers!.openai!.chat({
               prompt,
@@ -440,6 +448,7 @@ describe("runIntent – integration with providers", () => {
 
     const result = await runIntent(intent, {
       input: { question: "what is reliability?" },
+      metadata: {},
       providers: { openai: fakeProvider },
       telemetry: (event) => telemetryEvents.push(event),
     });

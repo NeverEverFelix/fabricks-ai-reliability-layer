@@ -118,12 +118,12 @@ import type {
     const trace: TelemetryEvent[] = [];
     const { name, steps } = intent;
     const telemetrySink = ctx.telemetry;
-  
+    const metadata = ctx.metadata;
     const emit = (event: TelemetryEvent) => {
       trace.push(event);
       telemetrySink?.(event);
     };
-  
+   
     const now = () => Date.now();
   
     // 1. No steps = fail fast (preserve previous behavior)
@@ -149,6 +149,7 @@ import type {
         success: false,
         error,
         trace,
+        metadata,
       };
     }
   
@@ -180,6 +181,7 @@ import type {
         success: false,
         error,
         trace,
+        metadata
       };
     }
   
@@ -376,6 +378,7 @@ import type {
           success: false,
           error,
           trace,
+          metadata
         };
       }
   
@@ -396,6 +399,7 @@ import type {
           success: false,
           error,
           trace,
+          metadata
         };
       }
   
@@ -419,6 +423,7 @@ import type {
       success: true,
       output: lastOutput,
       trace,
+      metadata
     };
   }
   

@@ -4,7 +4,7 @@ import {
   runIntent,
   TimeOutError,
   RetryExhaustedError,
-} from  "../../src";
+} from "../../src";
 
 describe("public API surface", () => {
   it("allows defining and running an intent via the top-level entrypoint", async () => {
@@ -23,6 +23,7 @@ describe("public API surface", () => {
 
     const result = await runIntent(intent, {
       input: { name: "Felix" },
+      metadata: {}, // required by new ExecutionContext
     });
 
     expect(result.success).toBe(true);
