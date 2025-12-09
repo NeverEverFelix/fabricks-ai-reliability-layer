@@ -56,10 +56,14 @@
     "@typescript-eslint/eslint-plugin": "^7.18.0",
     "@typescript-eslint/parser": "^7.18.0",
     "eslint": "^8.57.1",
-    "typescript": "^5.9.3",
-    "vitest": "^4.0.14",
     "prettier": "^3.3.3",
-    "rimraf": "^5.0.5"
+    "rimraf": "^5.0.5",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.14"
   },
-  "dependencies": {}
+  "dependencies": {
+    "express": "^5.2.1",
+    "fabricks-ai-reliability-layer": "^0.1.1",
+    "vite": "^7.2.6"
+  }
 }
