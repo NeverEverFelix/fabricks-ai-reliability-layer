@@ -48,5 +48,3 @@ export type {
 
 
 export {createOpenAIProvider} from "./providers/openai";
-export {createCacheProviderClient} from "./providers/cache"
-export {createDbProviderClient} from "./providers/database"

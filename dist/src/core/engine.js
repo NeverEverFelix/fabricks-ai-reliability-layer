@@ -109,6 +109,7 @@ async function runIntent(intent, ctx) {
     const trace = [];
     const { name, steps } = intent;
     const telemetrySink = ctx.telemetry;
+    const metadata = ctx.metadata;
     const emit = (event) => {
         trace.push(event);
         telemetrySink?.(event);
@@ -134,6 +135,7 @@ async function runIntent(intent, ctx) {
             success: false,
             error,
             trace,
+            metadata,
         };
     }
     // 2. Resolve entry step (preserve entryStepId semantics)
@@ -158,6 +160,7 @@ async function runIntent(intent, ctx) {
             success: false,
             error,
             trace,
+            metadata
         };
     }
     // 3. Normal path: mark intent started once
@@ -295,6 +298,7 @@ async function runIntent(intent, ctx) {
                 success: false,
                 error,
                 trace,
+                metadata
             };
         }
         const { success, output, nextStepId, error } = await runStepWithFallback(step);
@@ -311,6 +315,7 @@ async function runIntent(intent, ctx) {
                 success: false,
                 error,
                 trace,
+                metadata
             };
         }
         if (output !== undefined) {
@@ -330,5 +335,6 @@ async function runIntent(intent, ctx) {
         success: true,
         output: lastOutput,
         trace,
+        metadata
     };
 }
