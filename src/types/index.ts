@@ -125,6 +125,8 @@ export interface ExecutionContext<Input = unknown> {
   input: Input;
   providers?: {
     openai?:OpenAIProviderClient;
+    cache?:cacheProviderClient,
+    db?:DbProviderclient
   } 
   metadata?: Record<string, unknown>;
   telemetry?: TelemetrySink;
