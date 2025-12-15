@@ -1,6 +1,6 @@
 {
   "name": "fabricks-ai-reliability-layer",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Intent-based reliability engine for LLM workflows.",
   "license": "MIT",
   "author": "Felix Moronge",
