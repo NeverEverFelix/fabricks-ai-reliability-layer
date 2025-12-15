@@ -4,7 +4,7 @@ import {
   createOpenAIProvider,
 } from "fabricks-ai-reliability-layer";
 
-// import { consoleTelemetrySink } from "fabricks-ai-reliability-layer/dist/core/telemetry";
+
 import express from "express";
 
 console.log("Has OpenAI key:", !!process.env.OPENAI_API_KEY);
