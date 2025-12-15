@@ -10,7 +10,7 @@
     },
     "dependencies": {
       "express": "^4.19.2",
-      "fabricks-ai-reliability-layer": "^0.1.0"
+      "fabricks-ai-reliability-layer": "0.2.1"
     }
   }
   
