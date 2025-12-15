@@ -4,6 +4,7 @@ import { defineIntent, runIntent } from "fabricks-ai-reliability-layer";
 import express from "express";
 
 console.log("Has OpenAI key:", !!process.env.OPENAI_API_KEY);
+console.log("Has OpenAI key:", !!process.env.OPENAI_API_KEY);
 
 
 const app = express();
