@@ -39,12 +39,10 @@ export type{
 
 export type { RetryPolicy } from "./core/policies";
 
-export type {
-    TelemetrySink,
-  } from "./core/telemetry";
+
+export type { TelemetrySink } from "./types";
+export { consoleTelemetrySink } from "./core/telemetry";
 
 export { TimeOutError, RetryExhaustedError } from "./core/policies";
-
-export { consoleTelemetrySink } from "./core/telemetry";
 
 export {createOpenAIProvider} from "./providers/openai";

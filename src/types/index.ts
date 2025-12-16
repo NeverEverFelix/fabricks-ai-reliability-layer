@@ -100,7 +100,7 @@
  */
 
 import { RetryPolicy } from "../core/policies";
-import { TelemetrySink } from "../core/telemetry";
+
 export type StepId = string;
 
 export interface StepConfig<Input = unknown, Output = unknown> {
@@ -159,7 +159,7 @@ export interface ExecutionResult<Output = unknown> {
   metadata:Record<string, unknown>;
 }
 
-export { TelemetrySink };
+
 
 export interface OpenAIProviderClient{
   chat: (params:ChatParameters)=> Promise<{content:string}>
@@ -173,3 +173,4 @@ export interface OpenAiProviderConfig {
    baseUrl?:string,
    defaultModel?:string,
 }
+export type TelemetrySink = (event: TelemetryEvent) => void;
