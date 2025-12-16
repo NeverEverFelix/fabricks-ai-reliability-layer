@@ -3,9 +3,8 @@ import {
   defineIntent,
   runIntent,
   createOpenAIProvider,
-  TelemetrySink,
+  consoleTelemetrySink,
 } from "fabricks-ai-reliability-layer";
-
 const app = express();
 
 app.use(express.static("public"));
@@ -27,7 +26,10 @@ const askIntent = defineIntent<{ question: string }, string>({
   name: "Call Open AI",
   steps: [
     {
-      id: "hello world",
+      id: "primary",
+      timeoutMs: 10_000,
+      retry: { maxAttemps: 3 },
+      fallbackTo: "fallback",
       run: async (ctx) => {
         const response = await ctx.providers!.openai!.chat({
           prompt: ctx.input.question,
@@ -35,8 +37,19 @@ const askIntent = defineIntent<{ question: string }, string>({
         return response.content;
       },
     },
+    {
+      id: "fallback",
+      timeoutMs: 8_000,
+      retry: { maxAttemps: 2 },
+      run: async (ctx) => {
+        const response = await ctx.providers!.openai!.chat({
+          prompt: `Answer briefly and safely:\n${ctx.input.question}`,
+        });
+        return response.content;
+      },
+    },
   ],
-  entryStepId: "hello world",
+  entryStepId: "primary",
 });
 
 app.post("/ask", async (req, res) => {
