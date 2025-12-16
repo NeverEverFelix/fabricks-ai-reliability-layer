@@ -1,16 +1,17 @@
-import express from "express";
+import express, { type Request, type Response } from "express";
 import {
   defineIntent,
   runIntent,
   createOpenAIProvider,
   consoleTelemetrySink,
 } from "fabricks-ai-reliability-layer";
+
 const app = express();
 
 app.use(express.static("public"));
 app.use(express.json());
 
-app.get("/health", (_req, res) => res.json({ ok: true }));
+app.get("/health", (_req: Request, res: Response) => res.json({ ok: true }));
 
 const apiKey = process.env.OPENAI_API_KEY;
 if (!apiKey) {
@@ -22,42 +23,60 @@ const providers = {
   openai: createOpenAIProvider({ apiKey }),
 };
 
+type AskMetadata = {
+  route?: string;
+  userAgent?: string;
+  step1Output?: string;
+};
+
 const askIntent = defineIntent<{ question: string }, string>({
   name: "Call Open AI",
   steps: [
     {
-      id: "primary",
+      id: "step-1",
       timeoutMs: 10_000,
       retry: { maxAttemps: 3 },
-      fallbackTo: "fallback",
       run: async (ctx) => {
         const response = await ctx.providers!.openai!.chat({
           prompt: ctx.input.question,
         });
-        return response.content;
+
+        // stash step-1 output so step-2 can refine it
+        ctx.metadata = {
+          ...((ctx.metadata ?? {}) as AskMetadata),
+          step1Output: response.content,
+        };
+
+        return response.content; // output of step-1
       },
     },
     {
-      id: "fallback",
+      id: "step-2",
       timeoutMs: 8_000,
       retry: { maxAttemps: 2 },
       run: async (ctx) => {
+        const meta = (ctx.metadata ?? {}) as AskMetadata;
+        const step1Output = meta.step1Output;
+
         const response = await ctx.providers!.openai!.chat({
-          prompt: `Answer briefly and safely:\n${ctx.input.question}`,
+          prompt: `Answer briefly and safely:\n${step1Output ?? ctx.input.question}`,
         });
-        return response.content;
+
+        return response.content; // final output of intent
       },
     },
   ],
-  entryStepId: "primary",
+  entryStepId: "step-1",
 });
 
-app.post("/ask", async (req, res) => {
+app.post("/ask", async (req: Request, res: Response) => {
   try {
-    const question = req.body?.question;
+    const question = (req.body as any)?.question;
 
     if (typeof question !== "string" || question.trim().length === 0) {
-      return res.status(400).json({ error: "Body must include { question: string }" });
+      return res
+        .status(400)
+        .json({ error: "Body must include { question: string }" });
     }
 
     const result = await runIntent(askIntent, {
@@ -67,7 +86,8 @@ app.post("/ask", async (req, res) => {
       metadata: {
         route: "/ask",
         userAgent: req.get("user-agent") ?? undefined,
-      },
+        step1Output: undefined,
+      } satisfies AskMetadata,
     });
 
     if (!result.success) {
@@ -85,7 +105,9 @@ app.post("/ask", async (req, res) => {
     });
   } catch (err) {
     console.error("Unhandled /ask error:", err);
-    return res.status(500).json({ ok: false, error: "Internal server error" });
+    return res
+      .status(500)
+      .json({ ok: false, error: "Internal server error" });
   }
 });
 
