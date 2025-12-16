@@ -4,7 +4,6 @@ import {
   runIntent,
   createOpenAIProvider,
   TelemetrySink,
-  consoleTelemetrySink,
 } from "fabricks-ai-reliability-layer";
 
 const app = express();
