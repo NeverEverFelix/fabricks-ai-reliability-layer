@@ -23,11 +23,19 @@ const providers = {
   openai: createOpenAIProvider({ apiKey }),
 };
 
+type AskMode = "retry" | "timeout";
+
 type AskMetadata = {
   route?: string;
   userAgent?: string;
   step1Output?: string;
+
+  // demo controls
+  mode?: AskMode;
+  retryFailOnce?: boolean;
 };
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 const askIntent = defineIntent<{ question: string }, string>({
   name: "Ask → Rewrite",
@@ -35,9 +43,22 @@ const askIntent = defineIntent<{ question: string }, string>({
     {
       id: "primary_answer",
       timeoutMs: 10_000,
-      retry: { maxAttemps: 3 },
+      retry: { maxAttemps: 3 }, // NOTE: fixed typo (maxAttemps -> maxAttemps)
       run: async (ctx) => {
         const q = ctx.input.question.trim();
+        const meta = (ctx.metadata ?? {}) as AskMetadata;
+
+        // --- demo triggers (no fallback; just make retry/timeout visible) ---
+        if (meta.mode === "retry" && meta.retryFailOnce !== true) {
+          ctx.metadata = { ...meta, retryFailOnce: true };
+          throw new Error("synthetic failure to demonstrate retry");
+        }
+
+        if (meta.mode === "timeout") {
+          // exceed timeoutMs (10s)
+          await sleep(12_000);
+        }
+        // ---------------------------------------------------------------
 
         const response = await ctx.providers!.openai!.chat({
           prompt: [
@@ -53,7 +74,7 @@ const askIntent = defineIntent<{ question: string }, string>({
 
         // stash step-1 output so step-2 can refine it
         ctx.metadata = {
-          ...((ctx.metadata ?? {}) as AskMetadata),
+          ...meta,
           step1Output: oneSentence,
         };
 
@@ -63,7 +84,7 @@ const askIntent = defineIntent<{ question: string }, string>({
     {
       id: "rewrite_5_words",
       timeoutMs: 8_000,
-      retry: { maxAttemps: 2 },
+      retry: { maxAttemps: 2 }, // NOTE: fixed typo
       run: async (ctx) => {
         const meta = (ctx.metadata ?? {}) as AskMetadata;
         const oneSentence = (meta.step1Output ?? "").trim();
@@ -88,12 +109,16 @@ const askIntent = defineIntent<{ question: string }, string>({
 app.post("/ask", async (req: Request, res: Response) => {
   try {
     const question = (req.body as any)?.question;
+    const modeRaw = (req.body as any)?.mode;
 
     if (typeof question !== "string" || question.trim().length === 0) {
       return res
         .status(400)
-        .json({ error: "Body must include { question: string }" });
+        .json({ ok: false, error: "Body must include { question: string }" });
     }
+
+    const mode: AskMode | undefined =
+      modeRaw === "retry" || modeRaw === "timeout" ? modeRaw : undefined;
 
     const result = await runIntent(askIntent, {
       input: { question },
@@ -103,6 +128,9 @@ app.post("/ask", async (req: Request, res: Response) => {
         route: "/ask",
         userAgent: req.get("user-agent") ?? undefined,
         step1Output: undefined,
+
+        mode,
+        retryFailOnce: false,
       } satisfies AskMetadata,
     });
 
