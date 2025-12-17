@@ -30,43 +30,59 @@ type AskMetadata = {
 };
 
 const askIntent = defineIntent<{ question: string }, string>({
-  name: "Call Open AI",
+  name: "Ask → Rewrite",
   steps: [
     {
-      id: "step-1",
+      id: "primary_answer",
       timeoutMs: 10_000,
       retry: { maxAttemps: 3 },
       run: async (ctx) => {
+        const q = ctx.input.question.trim();
+
         const response = await ctx.providers!.openai!.chat({
-          prompt: ctx.input.question,
+          prompt: [
+            "Answer the question in EXACTLY 1 sentence.",
+            'Do NOT include a preface like "Sure", "Correct", or "Answer:".',
+            "Do NOT add bullet points or extra sentences.",
+            "",
+            `Question: ${q}`,
+          ].join("\n"),
         });
+
+        const oneSentence = response.content.trim();
 
         // stash step-1 output so step-2 can refine it
         ctx.metadata = {
           ...((ctx.metadata ?? {}) as AskMetadata),
-          step1Output: response.content,
+          step1Output: oneSentence,
         };
 
-        return response.content; // output of step-1
+        return oneSentence;
       },
     },
     {
-      id: "step-2",
+      id: "rewrite_5_words",
       timeoutMs: 8_000,
       retry: { maxAttemps: 2 },
       run: async (ctx) => {
         const meta = (ctx.metadata ?? {}) as AskMetadata;
-        const step1Output = meta.step1Output;
+        const oneSentence = (meta.step1Output ?? "").trim();
 
         const response = await ctx.providers!.openai!.chat({
-          prompt: `Answer briefly and safely:\n${step1Output ?? ctx.input.question}`,
+          prompt: [
+            "Rewrite the text into EXACTLY 5 words.",
+            "Return ONLY the 5 words.",
+            "No punctuation. No quotes. No extra text.",
+            "",
+            `Text: ${oneSentence}`,
+          ].join("\n"),
         });
 
-        return response.content; // final output of intent
+        return response.content.trim();
       },
     },
   ],
-  entryStepId: "step-1",
+  entryStepId: "primary_answer",
 });
 
 app.post("/ask", async (req: Request, res: Response) => {
