@@ -36,7 +36,7 @@ type AskMetadata = {
   requestId?: string;
 };
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 
 // ensures "fail once" persists across retry attempts (request-scoped)
 const failedOnceByRequestId = new Set<string>();
@@ -62,7 +62,7 @@ const askIntent = defineIntent<{ question: string }, string>({
 
         if (meta.mode === "timeout") {
           // exceed timeoutMs (10s)
-          await sleep(12_000);
+          await new Promise(() => {});
         }
         // ---------------------
 
