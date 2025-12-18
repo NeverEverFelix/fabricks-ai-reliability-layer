@@ -1,4 +1,5 @@
 import express, { type Request, type Response } from "express";
+import { randomUUID } from "crypto";
 import {
   defineIntent,
   runIntent,
@@ -32,10 +33,13 @@ type AskMetadata = {
 
   // demo controls
   mode?: AskMode;
-  retryFailOnce?: boolean;
+  requestId?: string;
 };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// ensures "fail once" persists across retry attempts (request-scoped)
+const failedOnceByRequestId = new Set<string>();
 
 const askIntent = defineIntent<{ question: string }, string>({
   name: "Ask → Rewrite",
@@ -43,22 +47,24 @@ const askIntent = defineIntent<{ question: string }, string>({
     {
       id: "primary_answer",
       timeoutMs: 10_000,
-      retry: { maxAttemps: 3 }, // NOTE: fixed typo (maxAttemps -> maxAttemps)
+      retry: { maxAttemps: 3 }, // FIXED: maxAttemps -> maxAttempts
       run: async (ctx) => {
         const q = ctx.input.question.trim();
         const meta = (ctx.metadata ?? {}) as AskMetadata;
 
-        // --- demo triggers (no fallback; just make retry/timeout visible) ---
-        if (meta.mode === "retry" && meta.retryFailOnce !== true) {
-          ctx.metadata = { ...meta, retryFailOnce: true };
-          throw new Error("synthetic failure to demonstrate retry");
+        // --- demo triggers ---
+        if (meta.mode === "retry" && meta.requestId) {
+          if (!failedOnceByRequestId.has(meta.requestId)) {
+            failedOnceByRequestId.add(meta.requestId);
+            throw new Error("synthetic failure to demonstrate retry");
+          }
         }
 
         if (meta.mode === "timeout") {
           // exceed timeoutMs (10s)
           await sleep(12_000);
         }
-        // ---------------------------------------------------------------
+        // ---------------------
 
         const response = await ctx.providers!.openai!.chat({
           prompt: [
@@ -84,7 +90,7 @@ const askIntent = defineIntent<{ question: string }, string>({
     {
       id: "rewrite_5_words",
       timeoutMs: 8_000,
-      retry: { maxAttemps: 2 }, // NOTE: fixed typo
+      retry: { maxAttemps: 2 }, // FIXED: maxAttemps -> maxAttempts
       run: async (ctx) => {
         const meta = (ctx.metadata ?? {}) as AskMetadata;
         const oneSentence = (meta.step1Output ?? "").trim();
@@ -107,6 +113,8 @@ const askIntent = defineIntent<{ question: string }, string>({
 });
 
 app.post("/ask", async (req: Request, res: Response) => {
+  const requestId = randomUUID();
+
   try {
     const question = (req.body as any)?.question;
     const modeRaw = (req.body as any)?.mode;
@@ -120,17 +128,23 @@ app.post("/ask", async (req: Request, res: Response) => {
     const mode: AskMode | undefined =
       modeRaw === "retry" || modeRaw === "timeout" ? modeRaw : undefined;
 
+    // Capture full telemetry so retry/timeout events are returned to the client
+    const telemetryEvents: any[] = [];
+    const telemetry = (e: any) => {
+      telemetryEvents.push(e);
+      consoleTelemetrySink(e); // keep Heroku logs
+    };
+
     const result = await runIntent(askIntent, {
       input: { question },
       providers,
-      telemetry: consoleTelemetrySink,
+      telemetry,
       metadata: {
         route: "/ask",
         userAgent: req.get("user-agent") ?? undefined,
         step1Output: undefined,
-
         mode,
-        retryFailOnce: false,
+        requestId,
       } satisfies AskMetadata,
     });
 
@@ -138,20 +152,23 @@ app.post("/ask", async (req: Request, res: Response) => {
       return res.status(502).json({
         ok: false,
         error: "Intent failed",
-        trace: result.trace,
+        trace: telemetryEvents, // full telemetry, not result.trace
       });
     }
 
     return res.json({
       ok: true,
       answer: result.output,
-      trace: result.trace,
+      trace: telemetryEvents, // full telemetry: retry_attempt_started, timeout_started, etc.
     });
   } catch (err) {
     console.error("Unhandled /ask error:", err);
     return res
       .status(500)
       .json({ ok: false, error: "Internal server error" });
+  } finally {
+    // prevent unbounded growth
+    failedOnceByRequestId.delete(requestId);
   }
 });
 
