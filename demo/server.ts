@@ -36,35 +36,34 @@ type AskMetadata = {
   requestId?: string;
 };
 
-
-
 // ensures "fail once" persists across retry attempts (request-scoped)
 const failedOnceByRequestId = new Set<string>();
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Normal demo intent: 2-step happy path + retry demo (synthetic fail-once).
+ * NOTE: No timeout demo here because Heroku will H12 at 30s if you do 10s x 3 attempts.
+ */
 const askIntent = defineIntent<{ question: string }, string>({
   name: "Ask → Rewrite",
   steps: [
     {
       id: "primary_answer",
       timeoutMs: 10_000,
-      retry: { maxAttemps: 3 }, // FIXED: maxAttemps -> maxAttempts
+      retry: { maxAttemps: 3 }, // FIXED: maxAttemps -> maxAttemps
       run: async (ctx) => {
         const q = ctx.input.question.trim();
         const meta = (ctx.metadata ?? {}) as AskMetadata;
 
-        // --- demo triggers ---
+        // --- demo trigger: retry (fail exactly once per request) ---
         if (meta.mode === "retry" && meta.requestId) {
           if (!failedOnceByRequestId.has(meta.requestId)) {
             failedOnceByRequestId.add(meta.requestId);
             throw new Error("synthetic failure to demonstrate retry");
           }
         }
-
-        if (meta.mode === "timeout") {
-          // exceed timeoutMs (10s)
-          await new Promise(() => {});
-        }
-        // ---------------------
+        // ----------------------------------------------------------
 
         const response = await ctx.providers!.openai!.chat({
           prompt: [
@@ -90,7 +89,7 @@ const askIntent = defineIntent<{ question: string }, string>({
     {
       id: "rewrite_5_words",
       timeoutMs: 8_000,
-      retry: { maxAttemps: 2 }, // FIXED: maxAttemps -> maxAttempts
+      retry: { maxAttemps: 2 }, // FIXED: maxAttemps -> maxAttemps
       run: async (ctx) => {
         const meta = (ctx.metadata ?? {}) as AskMetadata;
         const oneSentence = (meta.step1Output ?? "").trim();
@@ -106,6 +105,27 @@ const askIntent = defineIntent<{ question: string }, string>({
         });
 
         return response.content.trim();
+      },
+    },
+  ],
+  entryStepId: "primary_answer",
+});
+
+/**
+ * Timeout demo intent: guaranteed to fail fast (<< 30s) so Heroku doesn't H12.
+ * This is purely to show timeout telemetry in the HTTP JSON response.
+ */
+const askTimeoutIntent = defineIntent<{ question: string }, string>({
+  name: "Ask → Rewrite (timeout demo)",
+  steps: [
+    {
+      id: "primary_answer",
+      timeoutMs: 2_000, // keep it fast
+      retry: { maxAttemps: 1 }, // keep total < 30s (2s worst-case)
+      run: async () => {
+        // exceed timeoutMs on purpose
+        await sleep(5_000);
+        return "unreachable";
       },
     },
   ],
@@ -135,7 +155,9 @@ app.post("/ask", async (req: Request, res: Response) => {
       consoleTelemetrySink(e); // keep Heroku logs
     };
 
-    const result = await runIntent(askIntent, {
+    const intentToRun = mode === "timeout" ? askTimeoutIntent : askIntent;
+
+    const result = await runIntent(intentToRun, {
       input: { question },
       providers,
       telemetry,
@@ -152,14 +174,14 @@ app.post("/ask", async (req: Request, res: Response) => {
       return res.status(502).json({
         ok: false,
         error: "Intent failed",
-        trace: telemetryEvents, // full telemetry, not result.trace
+        trace: telemetryEvents,
       });
     }
 
     return res.json({
       ok: true,
       answer: result.output,
-      trace: telemetryEvents, // full telemetry: retry_attempt_started, timeout_started, etc.
+      trace: telemetryEvents,
     });
   } catch (err) {
     console.error("Unhandled /ask error:", err);
